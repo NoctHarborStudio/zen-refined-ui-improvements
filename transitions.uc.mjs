@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedMorphTransition";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedMorphTransitionParent.sys.mjs";
+const ACTOR = "ZenRefinedCachedTransition";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedCachedTransitionParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -24,7 +24,9 @@ function install() {
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let active = null, origin = null, originTimer = 0, serial = 0, dead = false;
   let releaseActor = null, enabled = false;
-  let historyUntil = 0;
+  let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
+  let recentPointer = null, pending = null, pendingTimer = 0;
+  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.4]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
@@ -40,6 +42,53 @@ function install() {
   }
   function getActor(b) {
     try { return b.browsingContext.currentWindowGlobal.getActor(ACTOR); } catch { return null; }
+  }
+  function clearCache() {
+    cacheEpoch++;
+    cached?.bitmap?.close?.(); cached=null;
+    window.clearTimeout(warmTimer); warmTimer=0;
+  }
+  function scheduleWarm(delay=180) {
+    window.clearTimeout(warmTimer);
+    if(!enabled || !on("snapshot") || motion.matches || dead)return;
+    warmTimer=window.setTimeout(()=>warm(gb.selectedBrowser,true),delay);
+  }
+  function warm(b, force=false) {
+    if(!safeBrowser(b)||!on("snapshot")||active||pending||warming||!isWeb(b.currentURI?.spec))return;
+    if(!force && now()-lastWarm<550)return;
+    const bounds=b.getBoundingClientRect(), global=b.browsingContext?.currentWindowGlobal, uri=b.currentURI.spec;
+    if(!global?.drawSnapshot){debug("warm: drawSnapshot unavailable");return;}
+    const scale=clamp(1900/Math.max(bounds.width,bounds.height),.12,1), epoch=cacheEpoch;
+    warming=true;lastWarm=now();
+    try {
+      global.drawSnapshot(null,scale,"transparent",{drawView:true}).then(bitmap=>{
+        if(!bitmap)return;
+        if(dead||!enabled||cacheEpoch!==epoch||active||pending||b!==gb.selectedBrowser||
+          b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri){
+          bitmap.close?.();return;
+        }
+        cached?.bitmap?.close?.();
+        cached={browser:b,uri,global,bitmap,at:now()};
+        debug("warm: cached outgoing viewport",bitmap.width,bitmap.height);
+      },error=>debug("warm: drawSnapshot rejected",String(error))).finally(()=>{
+        warming=false;
+        if(cacheEpoch!==epoch)scheduleWarm();
+      });
+    }catch(error){warming=false;debug("warm: failed",String(error));}
+  }
+  function pointer(b) {
+    const r=b.getBoundingClientRect();
+    if(recentPointer?.browser===b&&now()-recentPointer.at<1800)return recentPointer;
+    try {
+      const x={},y={};
+      window.windowUtils.getLastOverWindowPointerLocationInCSSPixels(x,y);
+      if(Number.isFinite(x.value)&&Number.isFinite(y.value)&&(x.value||y.value))
+        return {x:x.value,y:y.value};
+    }catch{}
+    return {x:r.left+r.width/2,y:r.top+r.height/2};
+  }
+  function clearPending() {
+    window.clearTimeout(pendingTimer);pendingTimer=0;pending=null;
   }
   function clearOrigin() {
     window.clearTimeout(originTimer);
@@ -87,7 +136,8 @@ function install() {
     if(active)finish(active,"interaction");
     clearOrigin();
     origin={browser:b,rect,at:now(),bitmap:null,pixels,expired:false};
-    if(!pixels)capture(b,origin);
+    if(!pixels && cached?.browser!==b)capture(b,origin);
+    debug('origin',pixels?'local snapshot':'cached/async snapshot');
     originTimer=window.setTimeout(clearOrigin,1400);
   }
   function newNode(tag,cls) {
@@ -126,14 +176,20 @@ function install() {
        (kind==="soft"&&!on("soft")))return null;
     if(active)finish(active,"superseded");
     const bounds=b.getBoundingClientRect();
-    const source=origin?.browser===b && now()-origin.at<1400 ? origin:null;
+    let source=origin?.browser===b && now()-origin.at<1400 ? origin:null;
     // No guessed pointer and no free-floating loading animation. History,
     // redirects without user intent, and failed captures remain native.
-    if(!source){debug("skip: no explicit origin");return null;}
+    const oldURI=pending?.previous||locations.get(b)||b.currentURI?.spec;
+    const oldCache=cached?.browser===b && cached.uri===oldURI && now()-cached.at<120000 ? cached:null;
+    if(!source && oldCache)source={browser:b,rect:pointer(b),bitmap:null,pixels:null};
+    if(!source){debug("skip: no origin or cached frame");return null;}
     window.clearTimeout(originTimer);originTimer=0;origin=null;
-    const backdrop=drawSource(source,bounds);
+    let backdrop=drawSource(source,bounds);
+    if(!backdrop && oldCache)backdrop=drawSource({bitmap:oldCache.bitmap},bounds);
     source.expired=true;source.bitmap?.close?.();source.bitmap=null;source.pixels=null;
     if(!backdrop){debug("skip: no valid outgoing snapshot");return null;}
+    clearPending();
+    clearCache();
     const overlay=newNode("div","zr-page-transition"),shade=newNode("div","zr-page-transition-shade");
     const art=svg("svg",{class:"zr-page-transition-art",viewBox:"0 0 "+bounds.width+" "+bounds.height});
     const defs=svg("defs"),gradient=svg("linearGradient",{id:"zr-morph-drop-fill",x1:"0",y1:"0",x2:"0",y2:"1"});
@@ -239,10 +295,10 @@ function install() {
     if(active!==s)return;
     active=null;window.cancelAnimationFrame(s.raf);window.clearTimeout(s.timer);window.clearTimeout(s.softTimer);
     if(s.kind==="soft"){try{getActor(s.browser)?.sendAsyncMessage("CancelSoft");}catch{}}
-    s.overlay.remove();debug("finish",reason,Math.round(now()-s.start)+"ms");
+    s.overlay.remove();debug("finish",reason,Math.round(now()-s.start)+"ms");scheduleWarm(350);
   }
   function cancel(){
-    if(active)finish(active,"cancel");clearOrigin();
+    if(active)finish(active,"cancel");clearOrigin();clearPending();
   }
   function history(){
     cancel();historyUntil=now()+1100;
@@ -250,13 +306,23 @@ function install() {
   function receive(b, global, message) {
     if (!safeBrowser(b)) return;
     if (message.name === "History") { history(); return; }
+    if (message.name === "Warm") { warm(b); return; }
+    if (message.name === "Paint") scheduleWarm(250);
     if (message.name === "Origin") {
       const d = message.data;
       if (![d.x, d.y, d.vw, d.vh].every(Number.isFinite) || d.vw <= 0 || d.vh <= 0) return;
       const r = b.getBoundingClientRect(), sx = r.width / d.vw, sy = r.height / d.vh;
       if (!d.navigation) return;
       historyUntil=0;
-      remember(b, { x:r.left+d.x*sx,y:r.top+d.y*sy },d.pixels||null);
+      const rect={x:r.left+d.x*sx,y:r.top+d.y*sy};
+      recentPointer={browser:b,...rect,at:now()};
+      if(active)return;
+      remember(b,rect,d.pixels||null);
+      if(pending?.browser===b && now()-pending.at<180 && !active){
+        const p=pending;
+        const st=begin(b,p.kind,p.uri);
+        if(st&&p.committed){st.committed=true;st.global=b.browsingContext?.currentWindowGlobal;}
+      }
       return;
     }
     if (message.name === "Paint") painted.add(global);
@@ -276,8 +342,12 @@ function install() {
         if (!safeBrowser(b)) return;
         const uri = requestURL(request, b);
         if (active?.browser === b && active.kind === "hard" && !active.committed) return;
-        begin(b, "hard", uri);
+        pending={browser:b,kind:"hard",uri,previous:locations.get(b),at:now(),committed:false};
+        if(!begin(b,"hard",uri)){
+          window.clearTimeout(pendingTimer);pendingTimer=window.setTimeout(clearPending,180);
+        }
       } else if (flags & P.STATE_STOP) {
+        scheduleWarm(250);
         if (active?.browser !== b || active.kind !== "hard") return;
         if (Components.isSuccessCode(status) && active.committed) markReady(active);
         else finish(active, "network-stop");
@@ -289,24 +359,32 @@ function install() {
       const previous = locations.get(b);
       locations.set(b, uri);
       if (b !== gb.selectedBrowser) return;
-      if (!isWeb(uri) || flags & P.LOCATION_CHANGE_ERROR_PAGE) { cancel(); return; }
+      if (!isWeb(uri) || flags & P.LOCATION_CHANGE_ERROR_PAGE) { cancel();clearCache();return; }
       const same = !!(flags & P.LOCATION_CHANGE_SAME_DOCUMENT);
       if (same) {
         if (previous && stripHash(previous) === stripHash(uri)) return;
         if (active?.kind === "hard") return;
-        if (on("soft")) begin(b, "soft", uri);
+        if(on("soft")){
+          pending={browser:b,kind:"soft",uri,previous,at:now(),committed:true};
+          if(!begin(b,"soft",uri)){
+            window.clearTimeout(pendingTimer);pendingTimer=window.setTimeout(clearPending,180);
+            scheduleWarm(350);
+          }
+        }
       } else if (active?.browser === b && active.kind === "hard") {
         active.committed = true;
         active.global = b.browsingContext?.currentWindowGlobal;
         active.uri = uri;
         if (active.global && active.global !== active.oldGlobal && painted.has(active.global)) markReady(active);
-      } else if (origin?.browser === b) {
+      } else if (origin?.browser === b || (cached?.browser===b&&cached.uri===previous)) {
+        pending={browser:b,kind:"hard",uri,previous,at:now(),committed:true};
         const s = begin(b, "hard", uri);
         if (s) {
           s.committed = true; s.global = b.browsingContext?.currentWindowGlobal;
           if (s.global && painted.has(s.global)) markReady(s);
-        }
+        }else{window.clearTimeout(pendingTimer);pendingTimer=window.setTimeout(clearPending,180);}
       }
+      if(!active)scheduleWarm(350);
     },
 
   };
@@ -315,6 +393,12 @@ function install() {
     if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
     if(event.target?.closest?.("#back-button,#forward-button,[command='Browser:Back'],[command='Browser:Forward']")){
       history();return;
+    }
+    const b=gb.selectedBrowser;
+    const r=b?.getBoundingClientRect();
+    if(r&&event.clientX>=r.left&&event.clientX<=r.left+r.width&&event.clientY>=r.top&&event.clientY<=r.top+r.height){
+      recentPointer={browser:b,x:event.clientX,y:event.clientY,at:now()};
+      if(!active)warm(b,true);
     }
     const el=event.target?.closest?.("toolbarbutton.bookmark-item,#urlbar,#reload-button");
     if(!el||!on("chrome"))return;
@@ -339,26 +423,35 @@ function install() {
       }
     }
   }
+  function move(event){
+    const b=gb.selectedBrowser;if(!safeBrowser(b)||active)return;
+    const r=b.getBoundingClientRect();
+    if(event.clientX<r.left||event.clientX>r.left+r.width||event.clientY<r.top||event.clientY>r.top+r.height)return;
+    recentPointer={browser:b,x:event.clientX,y:event.clientY,at:now()};warm(b);
+  }
+  function tabChange(){cancel();clearCache();recentPointer=null;scheduleWarm(250);}
   function settings() {
     enabled = on("enabled", false);
     if (!enabled || motion.matches || !on("snapshot")) {
-      cancel();
+      cancel();clearCache();
       releaseActor?.(); releaseActor = null;
     } else if (!releaseActor) {
-      try { releaseActor = ChromeUtils.importESModule(ACTOR_URI).acquireTransitionActor(); }
+      try { releaseActor = ChromeUtils.importESModule(ACTOR_URI).acquireTransitionActor();log("actor registered"); }
       catch (error) { console.warn("[Zen Refined transitions] actor unavailable; using navigation fallback", error); }
     }
+    log("settings", {enabled, snapshot:on("snapshot"), reducedMotion:motion.matches});
+    if(enabled&&on("snapshot"))scheduleWarm(200);
   }
   const tabEvents = ["TabSelect", "TabClose"];
-  const windowEvents = [["pointerdown", chromePointer, true], ["keydown", key, true], ["command",command,true],
+  const windowEvents = [["pointerdown", chromePointer, true], ["pointermove",move,true], ["keydown", key, true], ["command",command,true],
     ["resize", cancel, false], ["deactivate", cancel, false], ["beforecustomization", cancel, false],
     ["fullscreen", cancel, false], ["popupshowing", cancel, true]];
   function destroy() {
     if (dead) return;
     dead = true;
-    cancel();
+    cancel();clearCache();
     try { gb.removeTabsProgressListener(listener); } catch {}
-    for (const type of tabEvents) gb.tabContainer.removeEventListener(type, cancel);
+    for (const type of tabEvents) gb.tabContainer.removeEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.removeEventListener(type, callback, capture);
     try { prefs.removeObserver(PREFIX, settings); } catch {}
     motion.removeEventListener("change", settings);
@@ -367,8 +460,9 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending});
     gb.addTabsProgressListener(listener);
-    for (const type of tabEvents) gb.tabContainer.addEventListener(type, cancel);
+    for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
     prefs.addObserver(PREFIX, settings);
     motion.addEventListener("change", settings);
