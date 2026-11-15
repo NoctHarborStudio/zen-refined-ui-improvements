@@ -21,7 +21,7 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle
 An optional navigation-aware liquid reveal for regular HTTP(S) pages. A neutral light-gray drop starts at the real click, grows and stretches in flight, turns gray at the center, and immediately becomes an expanding circle revealing the unscaled live destination. The old page remains visible outside the circle.
 
 - Nominal duration: 700 ms, with continuous readiness-based speed adjustment and a configurable hard cap (4 seconds by default). No pause at the center.
-- Captures the outgoing viewport in the content process on navigation pointer-down; browser chrome inputs use a pre-command snapshot. All snapshots are transient local memory. If no valid old frame exists, skip the transition rather than animate over the destination.
+- Prepares a single outgoing viewport snapshot after navigation settles and refreshes it on pointer movement or scrolling; browser chrome inputs can also use a pre-command snapshot. No synchronous content readback on click. All snapshots are transient local memory. If no valid old frame exists, skip the transition rather than animate over the destination.
 - YouTube navigation-finish and generic SPA heuristics are used as optional readiness signals. A slow page may still load inside the expanding circle.
 - Back/forward, history traversal, no explicit navigation origin, tab changes, dialogs and reduced motion use native behavior or cancel the animation.
 - Off by default while experimental. Enable **Adaptive Page Transitions** in Sine preferences. Capturing is required for the effect. No screenshot is written to disk or transmitted externally.
@@ -53,3 +53,5 @@ See the [validation checklist](https://github.com/NoctHarborStudio/zen-refined-u
 ## License
 
 [MIT](LICENSE). Independent community project, not affiliated with Zen Browser.
+
+Diagnostics: enable debug logging in Sine, or use `window.__zenRefinedPageTransitions?.diagnostics()` in the browser toolbox console. Startup settings are always reported to the Browser Console.
