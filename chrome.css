@@ -9,6 +9,15 @@
   position: relative !important;
   overflow: visible !important;
 }
+/* OnePlane's compact two-row overlay measures the actual bookmarks height.
+ * Reserve lift room permanently, not only on hover, and leave the upper row
+ * untouched. Standalone Zen uses the adaptive vertical bound in the script.
+ */
+:root[oneplane-active="true"] #PersonalToolbar[data-zr-magnetic-enabled] {
+  box-sizing: border-box !important;
+  padding-top: calc(var(--zr-bm-base-pad-top, 0px) + 8px) !important;
+  min-height: calc(var(--zr-bm-base-height, 24px) + 8px) !important;
+}
 #PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
   overflow: visible !important;
 }

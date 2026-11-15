@@ -4,7 +4,7 @@
   "description": "Modular visual and usability refinements for Zen Browser, starting with Magnetic Bookmarks.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.1.0-preview.2",
+  "version": "0.1.0-preview.3",
   "style": {
     "chrome": "chrome.css"
   },
@@ -16,7 +16,7 @@
     "animation"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-15T18:30:00Z",
+  "updatedAt": "2026-11-15T18:36:00Z",
   "fork": [
     "zen"
   ],

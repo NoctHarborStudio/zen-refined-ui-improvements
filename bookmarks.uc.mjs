@@ -13,6 +13,7 @@ let uninstall = null;
 function install() {
   const toolbar = document.getElementById("PersonalToolbar");
   const list = document.getElementById("PlacesToolbarItems");
+  const navbar = document.getElementById("nav-bar");
   if (!toolbar || !list || !toolbar.contains(list)) return null;
 
   const indicator = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
@@ -32,6 +33,24 @@ function install() {
   let leaveTimer = 0;
   const GAP_GRACE_MS = 180;
   let settings = {};
+
+  // Keep the preferred lift in OnePlane's two-row layout by reserving a
+  // little static space above the bookmarks. This is not hover-dependent:
+  // opening a bookmark must not change the overall toolbar height.
+  const originalStyle = window.getComputedStyle(toolbar);
+  const originalHeight = toolbar.getBoundingClientRect().height;
+  toolbar.style.setProperty("--zr-bm-base-height", Math.max(24, originalHeight) + "px");
+  toolbar.style.setProperty("--zr-bm-base-pad-top", (parseFloat(originalStyle.paddingTop) || 0) + "px");
+
+  function verticalMotion(height, topRoom, bottomRoom, desiredScale, desiredLift) {
+    const growth = height * (desiredScale - 1) / 2;
+    const topNeed = growth + desiredLift;
+    const bottomNeed = growth - desiredLift;
+    const factor = Math.min(1,
+      topNeed > 0 ? Math.max(0, topRoom) / topNeed : 1,
+      bottomNeed > 0 ? Math.max(0, bottomRoom) / bottomNeed : 1);
+    return { scale: 1 + (desiredScale - 1) * factor, lift: desiredLift * factor };
+  }
 
   function readSettings() {
     settings = {
@@ -80,6 +99,7 @@ function install() {
     const metric = {
       width: rect.width,
       height: rect.height,
+      rowTop: rect.top - toolbar.getBoundingClientRect().top,
       start: numeric(style.marginInlineStart),
       end: numeric(style.marginInlineEnd),
       timer: 0
@@ -140,10 +160,18 @@ function install() {
     const free = availableGrowth();
     const extra = Math.min(m.width * (settings.scale - 1), Math.max(0, free - 4));
     const scaleX = 1 + extra / m.width;
-    // Keep the vertical lift and mild emphasis even in a crowded row.
-    const scaleY = Math.min(1.36, Math.max(1.08, 1 + (settings.scale - 1) * .86));
+    // A lifted bookmark must never enter the navigation/tab row above.
+    // Constrain the entire transformed rectangle, not just its translation.
+    const desiredScale = Math.min(1.36, Math.max(1.08, 1 + (settings.scale - 1) * .86));
+    const desiredLift = motion.matches ? 0 : settings.lift;
+    const bounds = toolbar.getBoundingClientRect();
+    const nav = navbar?.getBoundingClientRect();
+    const baselineTop = bounds.top + m.rowTop;
+    const upperEdge = Math.max(bounds.top, nav && nav.height > 0 && nav.top < bounds.top ? nav.bottom : bounds.top);
+    const topRoom = Math.max(0, baselineTop - upperEdge - 1);
+    const bottomRoom = Math.max(0, bounds.bottom - baselineTop - m.height - 3);
+    const { scale: scaleY, lift } = verticalMotion(m.height, topRoom, bottomRoom, desiredScale, desiredLift);
     const innerScale = Math.min(1.18, scaleX, scaleY);
-    const lift = motion.matches ? 0 : settings.lift;
     const set = (name, value) => item.style.setProperty(name, String(value));
     state.set(item, m);
     set("--zr-bm-margin-start", m.start + "px");
@@ -394,6 +422,8 @@ function install() {
     motion.removeEventListener("change", prefsObserver);
     toolbar.removeAttribute("data-zr-magnetic-enabled");
     toolbar.style.removeProperty("--zr-bm-duration");
+    toolbar.style.removeProperty("--zr-bm-base-height");
+    toolbar.style.removeProperty("--zr-bm-base-pad-top");
     indicator.remove();
   }
   try {

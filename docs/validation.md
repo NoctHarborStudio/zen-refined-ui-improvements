@@ -11,6 +11,7 @@ Target: Zen 1.24.2b, Sine 2.3.3. Start in a separate test profile.
 - [ ] Left/middle/right clicks, folders, context menus, native bookmark drag/drop and overflow chevron.
 - [ ] Narrow window, many bookmarks, long names, icons only, separators, workspace switching.
 - [ ] Standalone Zen, OnePlane preview, Nebula, Bookmark Toolbar Tweaks; no external configuration changes.
+- [ ] In OnePlane, hover directly beneath the tabs: the bookmark stays below the upper row, even with maximum lift/magnification. The reserved space is constant, not hover-dependent.
 - [ ] Compact Mode reveal, no unexpected hiding when hovering lifted bookmarks; page does not shift.
 - [ ] Reduced motion, light/dark themes, disable individual settings and Sine unload/reload.
 - [ ] No console errors or persistent custom styles after disabling.

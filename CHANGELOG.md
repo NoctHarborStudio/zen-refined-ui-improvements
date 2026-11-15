@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-preview.3
+
+- Bound bookmark magnification and upward translation to the available vertical space so hovered bookmarks cannot cover the navigation or tab row.
+- Reserve 8 px of permanent lift space in OnePlane's two-row layout, without changing toolbar height on hover.
+- Preserve the existing horizontal animation and liquid indicator.
+
 ## 0.1.0-preview.2
 
 - Preserve the liquid indicator's current position and velocity while crossing gaps between bookmarks.
