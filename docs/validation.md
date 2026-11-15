@@ -51,3 +51,10 @@ No browser integration testing has been performed for this preview.
 - [ ] Invalid snapshot, disabled capture, or missing actor: native navigation, no floating drop or gray rectangle.
 - [ ] Fast and slow readiness signals: the same virtual timeline advances continuously; check 4s cap and cancellation.
 - [ ] Check snapshot performance and viewport alignment at page zoom, 60/120/180 Hz, and with OnePlane.
+
+## Preview.4 cached-frame checks
+
+- [ ] On startup, console reports actor registration and settings; after a web page settles, diagnostics show cacheReady=true.
+- [ ] Move pointer over page and click quickly; cached outgoing viewport is used even when actor input arrives late or is unavailable.
+- [ ] No capture of destination may replace the outgoing frame after a URL change; cache is invalidated on tab changes and unload.
+- [ ] Test without actor, with disabled capture, and with history traversal; no false history animation from cached source.
