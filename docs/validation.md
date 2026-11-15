@@ -117,3 +117,12 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] Actor-confirmed visible content releases the shield independently of snapshots and is checked on the next refresh, without a second full DOM scan.
 - [ ] Ordinary document navigation, timing, ring geometry, CSS and Magnetic Bookmarks remain unchanged.
 - [ ] Real-world SPA changes, especially unreported animations or scene cuts when actor data is unavailable, remain heuristic. Check video → feed and feed → video in Zen.
+
+### Preview.6: regional DOM/paint reveal
+
+- [ ] New content outside the circle cannot release its entire dark shield.
+- [ ] Old paused/playing video or canvas remains protected while new text/images elsewhere become visible.
+- [ ] Main replacement releases the shield only with positive new content and no retained old dynamic region.
+- [ ] DOM region updates can retract obsolete holes; pixel fallback opens local cells only, requires source dynamic metadata, and stops when actor regions arrive.
+- [ ] Native navigation and the 800–4000 ms clock continue independently. Network transfer and stop timings are diagnostics only.
+- [ ] Validate regional mask rendering and Gecko actor paint delivery in actual Zen; no guarantee of SPA semantic identity.

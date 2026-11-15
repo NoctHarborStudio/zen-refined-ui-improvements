@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedHybridReveal";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedHybridRevealParent.sys.mjs";
+const ACTOR = "ZenRefinedRegionalReveal";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedRegionalRevealParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -26,7 +26,7 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
-  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.5]', ...args);
+  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.6]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   const scenes = new WeakMap();
@@ -224,6 +224,10 @@ function install() {
     gradient.append(light,dark);defs.append(gradient);
     const ring=svg("circle",{cx:bounds.width/2,cy:bounds.height/2,r:23,fill:"none",stroke:"#888","stroke-width":"1.5",opacity:"0"});
     const drop=svg("path",{fill:"url(#zr-live-reveal-drop-"+(serial+1)+")",stroke:"#969696","stroke-width":"1.25"});
+    const regional=svg("svg",{viewBox:"0 0 64 36",preserveAspectRatio:"none",width:"100%",height:"100%"});
+    const regionPath=svg("path",{d:"M0 0H64V36H0Z",fill:"#171717","fill-rule":"evenodd"});
+    regional.append(regionPath);
+    if(kind==="soft"){shield.style.setProperty("background","transparent","important");shield.append(regional);}
     art.append(defs,ring,drop);cover.append(backdrop,shade);overlay.append(cover,shield,art);
     const start=now();
     const st={token:++serial,browser:b,kind,uri,start,timeout:maxTime(),nominal:800,
@@ -234,6 +238,7 @@ function install() {
       sourceScene:sceneFor(b,oldURI)||oldCache?.scene||null,
       dynamicMask:makeDynamicMask([...(oldCache?.scene?.dynamic||[]),...(sceneFor(b,oldURI)?.dynamic||[])]),
       firstPaint:null,paintReason:null,visibleAt:null,raf:0,timer:0,lastGeometry:start,
+      regional,regionPath,regionMask:new Uint8Array(2304),regionCount:0,regionKey:"",actorRegions:false,fullReveal:false,networkDataAt:null,networkStopAt:null,
       progress:0,flightMs:260,last:start,rate:1,finalRendered:false,dim:on("dim"),radius:0,
       nextProbe:start+180,probing:false,probeCount:0,probeGeneration:0,probeSample:null,commitAt:kind==="soft"?start:null};
     active=st;
@@ -311,32 +316,86 @@ function install() {
     return mask;
   }
   function stableRoutePixels(old,previous,next,mask){
-    if(!old||!previous||!next||next.opaque<.4||next.range<7||next.detail<3)return false;
+    const result=new Uint8Array(2304);
+    if(!old||!previous||!next||next.opaque<.4||next.range<7||next.detail<3)return result;
     const delta=(a,b,i)=>(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]))/3;
-    const lum=(a,i)=>(a[i]*.299+a[i+1]*.587+a[i+2]*.114);
-    let changed=0,strong=0,edges=0;
+    const lum=(a,i)=>a[i]*.299+a[i+1]*.587+a[i+2]*.114;
     const a=old.data,b=previous.data,c=next.data;
     for(let y=0;y<36;y++)for(let x=0;x<64;x++){
       const k=y*64+x,i=k*4;
       if(mask?.[k]||a[i+3]<180||b[i+3]<180||c[i+3]<180)continue;
-      const d1=delta(a,b,i),d2=delta(a,c,i);
-      // A new pixel must differ from the outgoing frame AND survive a
-      // second observation. A moving video or brightness pulse is insufficient.
-      if(d1<14||d2<14||delta(b,c,i)>12)continue;
-      changed++;if(Math.min(d1,d2)>40)strong++;
+      if(delta(a,b,i)<14||delta(a,c,i)<14||delta(b,c,i)>12)continue;
       for(const n of [x>0?k-1:-1,x<63?k+1:-1,y>0?k-64:-1,y<35?k+64:-1]){
         if(n<0||mask?.[n])continue;
-        const j=n*4;
-        const before=lum(a,i)-lum(a,j),after=lum(c,i)-lum(c,j),prior=lum(b,i)-lum(b,j);
-        if(Math.abs(after-before)>22&&Math.abs(after-prior)<15){edges++;break;}
+        const j=n*4,before=lum(a,i)-lum(a,j),after=lum(c,i)-lum(c,j),prior=lum(b,i)-lum(b,j);
+        if(Math.abs(after-before)>22&&Math.abs(after-prior)<15){result[k]=1;break;}
       }
     }
-    // Small, persistent structural changes are sufficient; no complete
-    // page, loaded image or full DOM fingerprint is required.
-    return changed>=12&&strong>=4&&edges>=6;
+    // Only local evidence, never permission to uncover the whole viewport.
+    // Reject isolated noise using a neighboring-cell count.
+    const clean=new Uint8Array(2304);
+    for(let y=0;y<36;y++)for(let x=0;x<64;x++){
+      const k=y*64+x;if(!result[k])continue;
+      let count=0;
+      for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+        const a=x+dx,b=y+dy;if(a>=0&&a<64&&b>=0&&b<36)count+=result[b*64+a];
+      }
+      if(count>=4)clean[k]=1;
+    }
+    return clean;
+  }
+  function normalizeRects(rects){
+    return Array.isArray(rects)?rects.slice(0,320).filter(r=>Array.isArray(r)&&r.length===4&&r.every(Number.isFinite))
+      .map(r=>r.map(v=>clamp(v,0,1))).filter(r=>r[2]>r[0]&&r[3]>r[1]):[];
+  }
+  function regionMask(rects,blocked=[]){
+    const m=new Uint8Array(2304);
+    for(const [a,b,c,d] of normalizeRects(rects)){
+      // Grid cells intersecting a newly rendered element. The viewport is
+      // never resized; the holes reveal the native page at its own position.
+      for(let y=Math.floor(b*36);y<Math.ceil(d*36);y++)
+        for(let x=Math.floor(a*64);x<Math.ceil(c*64);x++)if(x>=0&&x<64&&y>=0&&y<36)m[y*64+x]=1;
+    }
+    const protection=makeDynamicMask(normalizeRects(blocked));
+    for(let i=0;i<m.length;i++)if(protection[i])m[i]=0;
+    return m;
+  }
+  function maskPath(mask){
+    let path="M0 0H64V36H0Z",count=0;
+    // Nonoverlapping row runs make even-odd holes deterministic.
+    for(let y=0;y<36;y++)for(let x=0;x<64;){
+      if(!mask[y*64+x]){x++;continue;}
+      const start=x;while(x<64&&mask[y*64+x]){x++;count++;}
+      path+="M"+start+" "+y+"H"+x+"V"+(y+1)+"H"+start+"Z";
+    }
+    return {path,count};
+  }
+  function setRegions(s,mask,reason){
+    if(active!==s||s.fullReveal)return;
+    const {path,count}=maskPath(mask);
+    s.regionMask=mask;s.regionCount=count;
+    if(path!==s.regionKey){s.regionKey=path;s.regionPath.setAttribute("d",path);}
+    if(count&&s.firstPaint===null&&regionIntersects(s))markPaint(s,reason,false);
+  }
+  function regionIntersects(s){
+    const r=Math.max(23,s.radius||0),cx=s.w/2,cy=s.h/2;
+    for(let y=0;y<36;y++)for(let x=0;x<64;x++){
+      if(!s.regionMask[y*64+x])continue;
+      const dx=Math.max(0,Math.abs((x+.5)*s.w/64-cx)-s.w/128);
+      const dy=Math.max(0,Math.abs((y+.5)*s.h/36-cy)-s.h/72);
+      if(dx*dx+dy*dy<=r*r)return true;
+    }
+    return false;
+  }
+  function openWhole(s,reason){
+    if(active!==s||s.fullReveal)return;
+    s.fullReveal=true;
+    if(s.firstPaint===null)markPaint(s,reason,true);
+    else{s.visibleAt=now();s.paintReason=reason;}
   }
   function probeFirstFrame(s,time){
-    if(active!==s||s.firstPaint!==null||s.probing||time<s.nextProbe||s.probeCount>=14)return;
+    if(active!==s||s.fullReveal||s.probing||time<s.nextProbe||s.probeCount>=14||
+       (s.kind==="hard"&&s.firstPaint!==null)||(s.kind==="soft"&&s.actorRegions))return;
     const b=s.browser,global=b.browsingContext?.currentWindowGlobal,uri=b.currentURI?.spec;
     if(!s.committed||!global?.drawSnapshot||!isWeb(uri))return;
     if(s.kind==="hard"&&(!s.oldGlobal||global===s.oldGlobal))return;
@@ -349,15 +408,19 @@ function install() {
       global.drawSnapshot(null,scale,"transparent",{drawView:true}).then(bitmap=>{
         if(!bitmap)return;
         try{
-          if(active!==s||s.firstPaint!==null||s.probeGeneration!==generation||b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri)return;
+          if(active!==s||s.fullReveal||(s.kind==="hard"&&s.firstPaint!==null)||(s.kind==="soft"&&s.actorRegions)||s.probeGeneration!==generation||b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri)return;
           const sample=sampleFrame(bitmap,bitmap.width,bitmap.height);
           const soft=s.kind==="soft";
-          const accepted=soft?stableRoutePixels(s.oldSample,s.probeSample,sample,s.dynamicMask):changedFrame(s.oldSample,sample);
-          if(accepted){
-            s.global=global;markPaint(s,soft?"stable new pixels outside dynamic areas":"first changed pixels");
-          }else{
-            if(soft)s.probeSample=sample;
-            debug("first-frame probe: no confirmed visible change",s.probeCount);
+          if(soft){
+            // Unknown dynamic geometry is not permission to reveal old video.
+            // With source metadata, the fallback opens only proven local cells.
+            if(s.sourceScene){
+              const mask=stableRoutePixels(s.oldSample,s.probeSample,sample,s.dynamicMask);
+              setRegions(s,mask,"regional pixel fallback");
+            }
+            s.probeSample=sample;
+          }else if(changedFrame(s.oldSample,sample)){
+            s.global=global;markPaint(s,"first changed pixels");
           }
         }finally{bitmap.close?.();}
       },error=>debug("first-frame probe failed",String(error))).finally(()=>{s.probing=false;});
@@ -365,6 +428,7 @@ function install() {
   }
   function resetPaint(s){
     s.firstPaint=null;s.visibleAt=null;s.paintReason=null;s.probeGeneration++;s.probeCount=0;s.probeSample=null;s.nextProbe=now();
+    s.fullReveal=false;s.actorRegions=false;s.regionMask=new Uint8Array(2304);s.regionCount=0;s.regionKey="";s.regionPath.setAttribute("d","M0 0H64V36H0Z");
     s.shield.style.opacity="1";
   }
   function render(s,time){
@@ -397,7 +461,7 @@ function install() {
     // The shield is dark, not a snapshot. It covers the outgoing document
     // inside the aperture until the new document emits its first update.
     // Once released, actual DOM/video/images remain live and keep loading.
-    if(s.visibleAt!==null)s.shield.style.opacity=String(1-ease((time-s.visibleAt)/80));
+    if(s.visibleAt!==null&&(s.kind==="hard"||s.fullReveal))s.shield.style.opacity=String(1-ease((time-s.visibleAt)/80));
     if(p>=1){s.ring.setAttribute("opacity","0");s.cover.style.opacity="0";}
   }
   function tick(s,time){
@@ -433,7 +497,8 @@ function install() {
       if(elapsed>=s.timeout-24)s.progress=1;
       // If first paint occurs mid-flight, release the dark layer as soon as
       // a visible aperture exists, rather than waiting for animation end.
-      if(s.firstPaint!==null&&s.visibleAt===null)s.visibleAt=time;
+      if(s.kind==="soft"&&!s.fullReveal&&s.firstPaint===null&&s.regionCount&&regionIntersects(s))markPaint(s,"visible regional content",false);
+      if(s.firstPaint!==null&&s.visibleAt===null&&(s.kind==="hard"||s.fullReveal))s.visibleAt=time;
     }
     s.last=time;
     render(s,time);
@@ -441,10 +506,10 @@ function install() {
     if(elapsed>=s.timeout)return finish(s,"deadline-frame");
     s.raf=window.requestAnimationFrame(t=>tick(s,t));
   }
-  function markPaint(s,reason="paint"){
+  function markPaint(s,reason="paint",whole=true){
     if(active!==s||!s.committed||s.firstPaint!==null)return;
     s.firstPaint=now();s.paintReason=reason;
-    if(s.firstPaint-s.start>=s.flightMs)s.visibleAt=s.firstPaint;
+    if(whole&&s.firstPaint-s.start>=s.flightMs)s.visibleAt=s.firstPaint;
     debug("first destination frame",reason,Math.round(s.firstPaint-s.start)+"ms");
   }
   function finish(s,reason){
@@ -452,7 +517,7 @@ function install() {
     active=null;window.cancelAnimationFrame(s.raf);window.clearTimeout(s.timer);
     if(s.kind==="soft"){try{getActor(s.browser)?.sendAsyncMessage("CancelSoft");}catch{}}
     s.overlay.remove();
-    lastResult={reason,elapsed:Math.round(now()-s.start),progress:Math.round(s.progress*1000)/1000,committed:s.committed,painted:s.firstPaint!==null,firstPaintMs:s.firstPaint===null?null:Math.round(s.firstPaint-s.start),paintReason:s.paintReason,probeCount:s.probeCount};
+    lastResult={reason,elapsed:Math.round(now()-s.start),progress:Math.round(s.progress*1000)/1000,committed:s.committed,painted:s.firstPaint!==null,firstPaintMs:s.firstPaint===null?null:Math.round(s.firstPaint-s.start),paintReason:s.paintReason,probeCount:s.probeCount,regionCount:s.regionCount,fullReveal:s.fullReveal,networkDataMs:s.networkDataAt===null?null:Math.round(s.networkDataAt-s.start),networkStopMs:s.networkStopAt===null?null:Math.round(s.networkStopAt-s.start)};
     debug("finish",lastResult);scheduleWarm(350);
   }
   function cancel(){
@@ -496,9 +561,17 @@ function install() {
     if (message.name === "Paint") painted.add(global);
     const s = active;
     if (!s || s.browser !== b || !s.committed) return;
-    if(message.name==="SoftPaint"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global&&
-       message.data.evidence==="route-content"&&stripHash(message.data.oldURI)===stripHash(s.oldURI)&&
-       stripHash(message.data.uri)===stripHash(s.uri))markPaint(s,message.data.reason||"SPA visible content");
+    if(message.name==="SoftRegions"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global&&
+       stripHash(message.data.oldURI)===stripHash(s.oldURI)&&stripHash(message.data.uri)===stripHash(s.uri)&&!s.fullReveal){
+      const data=message.data;
+      if(!Array.isArray(data.rects)||!Array.isArray(data.blocked))return;
+      s.actorRegions=true;
+      const blocked=normalizeRects(data.blocked);
+      setRegions(s,regionMask(data.rects,blocked),"DOM regional paint");
+      // Whole-page release requires positive evidence that the outgoing main
+      // content has been replaced, not just a change elsewhere.
+      if(data.replaced===true&&data.rects.length>0&&blocked.length===0)openWhole(s,"main content replaced");
+    }
     if(message.name==="SoftBaselineMissing"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global)
       debug("SPA baseline unavailable; using stable visual fallback");
     if(message.name==="Paint"&&s.kind==="hard"&&global===b.browsingContext?.currentWindowGlobal&&
@@ -511,7 +584,9 @@ function install() {
   }
   const listener = {
     onStateChange(b, wp, request, flags, status) {
-      if (!wp?.isTopLevel || !(flags & P.STATE_IS_NETWORK) || b !== gb.selectedBrowser) return;
+      if(!wp?.isTopLevel||b!==gb.selectedBrowser)return;
+      if(active?.browser===b&&(flags&P.STATE_TRANSFERRING)&&(flags&P.STATE_IS_DOCUMENT))active.networkDataAt??=now();
+      if(!(flags&P.STATE_IS_NETWORK))return;
       if (flags & P.STATE_START) {
         if (!safeBrowser(b)) return;
         const uri = requestURL(request, b);
@@ -525,7 +600,7 @@ function install() {
         if (active?.browser !== b || active.kind !== "hard") return;
         // Network completion only triggers an early visual probe, not a
         // declaration of readiness or a completion condition.
-        active.nextProbe=now();
+        active.networkStopAt??=now();active.nextProbe=now();
       }
     },
     onLocationChange(b, wp, request, location, flags) {
@@ -641,7 +716,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.5",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.6",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,regionCount:active?.regionCount??null,fullReveal:active?.fullReveal??null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
