@@ -13,7 +13,7 @@ export class ZenRefinedTransitionChild extends JSWindowActorChild {
         if (entries.getEntries().some(entry => entry.name === "first-contentful-paint")) this.#paint();
       });
       this.#paintObserver.observe({ type: "paint", buffered: true });
-    } catch {}
+    } catch { this.#paintObserver = null; }
   }
 
   #send(name, data = {}) {
@@ -29,9 +29,9 @@ export class ZenRefinedTransitionChild extends JSWindowActorChild {
   }
 
   handleEvent(event) {
-    if (event.type === "click") {
+    if (event.type === "pointerdown" || (event.type === "click" && event.detail === 0)) {
       if (!event.isTrusted || event.button !== 0 || event.ctrlKey || event.metaKey ||
-          event.shiftKey || event.altKey || event.defaultPrevented) return;
+          event.shiftKey || event.altKey) return;
       const win = this.contentWindow;
       const element = event.composedPath().find(n => n?.nodeType === 1 &&
         n.matches?.("a[href], area[href], [role=link]"));
@@ -46,9 +46,9 @@ export class ZenRefinedTransitionChild extends JSWindowActorChild {
     } else if (event.type === "pageshow") {
       if (event.persisted) this.#send("Paint");
       else if (this.contentWindow?.performance?.getEntriesByName("first-contentful-paint").length) this.#paint();
-    } else if (event.type === "MozAfterPaint") {
-      // FCP is preferred; this handles engines which don't expose Paint Timing.
-      if (!this.#paintObserver && this.document?.readyState !== "loading") this.#paint();
+    } else if (event.type === "DOMContentLoaded" && !this.#paintObserver) {
+      const win = this.contentWindow;
+      win?.requestAnimationFrame(() => win.requestAnimationFrame(() => this.#paint()));
     }
   }
 
