@@ -100,3 +100,12 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] YouTube first media frame and SPA visibility/attribute mutations are additional first-update hints; do not wait for network completion.
 - [ ] Transition starts at normal speed, slows only after 420ms without a first frame; committed pages are not automatically stretched to 4s.
 - [ ] Diagnostics lastResult includes firstPaintMs, paintReason and probeCount. Real compositor output still requires Zen testing.
+
+### Preview.4: generic route-aware SPA detection
+
+- [ ] Existing video frames, play/loadeddata and canvas animations on the outgoing route do not release the dark shield.
+- [ ] Newly visible text, a new loaded image or changed decoded video source can release it after two refresh frames; no full load or site-specific route event is required.
+- [ ] A missing or mismatched old-route baseline cannot certify a same-document transition. Native completion remains bounded.
+- [ ] Hard navigations retain first-paint / low-resolution changed-pixel detection, but require distinct document identity.
+- [ ] Late pointer messages cannot capture the incoming route as the outgoing snapshot; compare source URI.
+- [ ] Re-test video → feed, feed → video, two videos with a reused player, dynamic canvases, animated image feeds, and normal links in Zen. Structural comparison is heuristic and bounded; no general SPA route-completion API exists.

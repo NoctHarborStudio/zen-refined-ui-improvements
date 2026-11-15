@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedLiveReveal";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedLiveRevealParent.sys.mjs";
+const ACTOR = "ZenRefinedRouteReveal";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedRouteRevealParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -26,7 +26,7 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
-  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.3]', ...args);
+  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.4]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
@@ -55,7 +55,7 @@ function install() {
     warmTimer=window.setTimeout(()=>warm(gb.selectedBrowser,true),delay);
   }
   function warm(b, force=false) {
-    if(!safeBrowser(b)||!on("snapshot")||active||pending||!isWeb(b.currentURI?.spec))return;
+    if(!safeBrowser(b)||!on("snapshot")||active||pending||origin||!isWeb(b.currentURI?.spec))return;
     const delay=(force?350:1000)-(now()-lastWarm);
     if(warming || delay>0){if(force)scheduleWarm(Math.max(120,delay));return;}
     const bounds=b.getBoundingClientRect(), global=b.browsingContext?.currentWindowGlobal, uri=b.currentURI.spec;
@@ -65,7 +65,7 @@ function install() {
     try {
       global.drawSnapshot(null,scale,"transparent",{drawView:true}).then(bitmap=>{
         if(!bitmap)return;
-        if(dead||!enabled||cacheEpoch!==epoch||active||pending||b!==gb.selectedBrowser||
+        if(dead||!enabled||cacheEpoch!==epoch||active||pending||origin||b!==gb.selectedBrowser||
           b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri){
           bitmap.close?.();return;
         }
@@ -126,6 +126,7 @@ function install() {
       const bounds=b.getBoundingClientRect();
       if(!global?.drawSnapshot || !isWeb(b.currentURI?.spec))return;
       const uri=b.currentURI.spec;
+      if(rec.uri!==uri)return;
       const scale=clamp(1900/Math.max(bounds.width,bounds.height),.12,1);
       // Browser chrome inputs (bookmarks/URL bar) have no content pointer actor.
       // Capture before the command and accept only while the old URI is current.
@@ -138,12 +139,13 @@ function install() {
       },()=>{});
     }catch{}
   }
-  function remember(b,rect,pixels=null) {
+  function remember(b,rect,pixels=null,sourceURI=b.currentURI?.spec) {
     if(!safeBrowser(b) || !on("snapshot"))return;
     if(active)finish(active,"interaction");
     clearOrigin();
-    origin={browser:b,rect,at:now(),bitmap:null,pixels,expired:false,global:b.browsingContext?.currentWindowGlobal,uri:b.currentURI?.spec};
-    if(!pixels && (cached?.browser!==b||cached.uri!==b.currentURI?.spec))capture(b,origin);
+    origin={browser:b,rect,at:now(),bitmap:null,pixels,expired:false,global:b.browsingContext?.currentWindowGlobal,uri:sourceURI};
+    // Late input IPC must never capture the destination as the outgoing page.
+    if(!pixels && sourceURI===b.currentURI?.spec && (cached?.browser!==b||cached.uri!==sourceURI))capture(b,origin);
     debug('origin',pixels?'local snapshot':'cached/async snapshot');
     originTimer=window.setTimeout(clearOrigin,1400);
   }
@@ -189,6 +191,7 @@ function install() {
     // redirects without user intent, and failed captures remain native.
     const oldURI=pending?.previous||locations.get(b)||b.currentURI?.spec;
     const oldCache=cached?.browser===b && cached.uri===oldURI && now()-cached.at<120000 ? cached:null;
+    if(source&&source.uri!==oldURI){clearOrigin();source=null;}
     if(!source && oldCache)source={browser:b,rect:pointer(b),bitmap:null,pixels:null,global:oldCache.global,uri:oldCache.uri};
     if(!source){debug("skip: no origin or cached frame");return null;}
     window.clearTimeout(originTimer);originTimer=0;origin=null;
@@ -240,7 +243,7 @@ function install() {
       " C "+(-r*k)+" "+h+" "+(-tail)+" "+(h*k*(1-stretch*.7))+" "+(-tail)+" 0 Z";
   }
   function watchSoft(s){
-    try{getActor(s.browser)?.sendAsyncMessage("WatchSoft",{token:s.token,uri:s.uri});}catch{}
+    try{getActor(s.browser)?.sendAsyncMessage("WatchSoft",{token:s.token,uri:s.uri,oldURI:s.oldURI});}catch{}
   }
   function syncGeometry(s,force=false){
     const r=s.browser.getBoundingClientRect();
@@ -281,10 +284,13 @@ function install() {
     return changed>=18&&strong>=5;
   }
   function probeFirstFrame(s,time){
-    if(active!==s||s.firstPaint!==null||s.probing||time<s.nextProbe||s.probeCount>=12)return;
+    // A same-document URL change does not establish that the old DOM is gone.
+    // Pixel changes in video, canvas, CSS animations or ads are not navigation.
+    // Only a distinct document may use the inexpensive pixel fallback.
+    if(s.kind!=="hard"||active!==s||s.firstPaint!==null||s.probing||time<s.nextProbe||s.probeCount>=12)return;
     const b=s.browser,global=b.browsingContext?.currentWindowGlobal,uri=b.currentURI?.spec;
     if(!s.committed||!global?.drawSnapshot||!isWeb(uri))return;
-    if(s.kind==="hard"&&s.oldGlobal&&global===s.oldGlobal)return;
+    if(!s.oldGlobal||global===s.oldGlobal)return;
     if(stripHash(uri)!==stripHash(s.uri))return;
     s.probing=true;s.probeCount++;s.nextProbe=time+190;
     const generation=s.probeGeneration;
@@ -296,8 +302,7 @@ function install() {
           if(active!==s||s.firstPaint!==null||s.probeGeneration!==generation||b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri)return;
           const sample=sampleFrame(bitmap,bitmap.width,bitmap.height);
           if(changedFrame(s.oldSample,sample)){
-            // Hard navigation has a distinct document identity. For SPA,
-            // a changed rendered viewport is a fallback hint (not full load).
+            // Different document identity is required before comparing pixels.
             s.global=global;markPaint(s,"first changed pixels");
           }else debug("first-frame probe: no visible change",s.probeCount);
         }finally{bitmap.close?.();}
@@ -416,7 +421,9 @@ function install() {
       const rect={x:r.left+d.x*sx,y:r.top+d.y*sy};
       recentPointer={browser:b,...rect,at:now()};
       if(active)return;
-      remember(b,rect,d.pixels||null);
+      const sourceURI=typeof d.uri==="string"?d.uri:locations.get(b);
+      if(!sourceURI)return;
+      remember(b,rect,d.pixels||null,sourceURI);
       if(pending?.browser===b && now()-pending.at<180 && !active){
         const p=pending;
         const st=begin(b,p.kind,p.uri);
@@ -428,7 +435,11 @@ function install() {
     if (message.name === "Paint") painted.add(global);
     const s = active;
     if (!s || s.browser !== b || !s.committed) return;
-    if(message.name==="SoftPaint"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global&&stripHash(message.data.uri)===stripHash(s.uri))markPaint(s,message.data.reason||"SPA update");
+    if(message.name==="SoftPaint"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global&&
+       message.data.evidence==="route-content"&&stripHash(message.data.oldURI)===stripHash(s.oldURI)&&
+       stripHash(message.data.uri)===stripHash(s.uri))markPaint(s,message.data.reason||"SPA visible content");
+    if(message.name==="SoftBaselineMissing"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global)
+      debug("SPA baseline unavailable; keep safe dark aperture until native completion");
     if(message.name==="Paint"&&s.kind==="hard"&&global===b.browsingContext?.currentWindowGlobal&&
        global!==s.oldGlobal&&stripHash(b.currentURI?.spec)===stripHash(s.uri)){
       s.global=global;markPaint(s,"new document paint");
@@ -569,7 +580,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.3",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.4",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
