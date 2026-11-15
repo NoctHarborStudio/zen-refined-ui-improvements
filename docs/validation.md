@@ -4,7 +4,8 @@ Target: Zen 1.24.2b, Sine 2.3.3. Start in a separate test profile.
 
 - [ ] Install from the preview branch; native bookmarks appear normally until hovered.
 - [ ] Hover first, middle and last bookmarks. Neighbors move smoothly; no overlap, clipping or rapid hover oscillation.
-- [ ] Move between adjacent and distant bookmarks. The indicator glides, stretches, and settles below the active bookmark.
+- [ ] Move between adjacent and distant bookmarks, including slowly across gaps and rapidly across multiple items. The indicator stays visible and glides from its current position without teleporting.
+- [ ] Leave the bookmark group; verify the indicator fades after a brief grace period, and re-entry cancels that pending departure.
 - [ ] Move within one bookmark: the indicator deviates slightly from center, not one-to-one with the pointer.
 - [ ] Leave the row: all bookmarks return to their original layout and the indicator fades.
 - [ ] Left/middle/right clicks, folders, context menus, native bookmark drag/drop and overflow chevron.

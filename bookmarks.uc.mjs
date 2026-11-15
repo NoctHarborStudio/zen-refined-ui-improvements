@@ -29,6 +29,8 @@ function install() {
   const openPopups = new Set();
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
+  let leaveTimer = 0;
+  const GAP_GRACE_MS = 180;
   let settings = {};
 
   function readSettings() {
@@ -230,8 +232,22 @@ function install() {
     if (!raf) { last = 0; raf = window.requestAnimationFrame(animate); }
   }
 
+  function cancelPendingLeave() {
+    if (leaveTimer) window.clearTimeout(leaveTimer);
+    leaveTimer = 0;
+  }
+
+  function queueLeave() {
+    if (!active || leaveTimer) return;
+    leaveTimer = window.setTimeout(() => {
+      leaveTimer = 0;
+      clear();
+    }, GAP_GRACE_MS);
+  }
+
   function select(item, x = null) {
     if (!toolbarVisible() || !eligible(item)) return;
+    cancelPendingLeave();
     pointerX = x;
     if (active === item) { schedule(); return; }
     const previous = active;
@@ -250,6 +266,7 @@ function install() {
   }
 
   function clear(immediately = false) {
+    cancelPendingLeave();
     const previous = active;
     active = null; pointerX = null; shown = false;
     indicator.removeAttribute("data-zr-visible");
@@ -273,25 +290,52 @@ function install() {
       const t = toolbar.getBoundingClientRect();
       if (event.clientX >= r.left - 2 && event.clientX <= r.right + 2 &&
           event.clientY >= Math.min(r.top, t.top) && event.clientY <= t.bottom) {
+        cancelPendingLeave();
         pointerX = event.clientX;
         schedule();
         return;
       }
     }
-    clear();
+    // A gap is not a departure. Expansion/lift creates transient empty
+    // hit-test regions between native buttons. Keep the current spring
+    // position and velocity across these regions so the next select()
+    // retargets an existing drop rather than creating a new one.
+    const visible = candidates();
+    if (active && visible.length) {
+      const rects = visible.map(node => node.getBoundingClientRect());
+      const left = Math.min(...rects.map(r => r.left));
+      const right = Math.max(...rects.map(r => r.right));
+      const top = Math.min(...rects.map(r => r.top));
+      const bottom = Math.max(...rects.map(r => r.bottom));
+      const t = toolbar.getBoundingClientRect();
+      if (event.clientX >= left - 4 && event.clientX <= right + 4 &&
+          event.clientY >= Math.min(top, t.top) - 3 &&
+          event.clientY <= Math.max(bottom, t.bottom) + 3) {
+        cancelPendingLeave();
+        // Leave the old target in place until the next real bookmark hit.
+        // This prevents layout-generated hover oscillation.
+        return;
+      }
+    }
+    queueLeave();
   }
 
-  function onPointerLeave() { if (!openPopups.size) clear(); }
+  function onPointerLeave(event) {
+    if (openPopups.size) return;
+    if (event?.type === "pointerleave") queueLeave();
+    else clear(true);
+  }
   function onFocus(event) {
     const item = event.target?.closest?.("toolbarbutton.bookmark-item");
     if (eligible(item) && item.matches(":focus-visible")) select(item, null);
   }
   function onFocusOut(event) {
-    if (!openPopups.size && event.relatedTarget && !toolbar.contains(event.relatedTarget) && !toolbar.matches(":hover")) clear();
+    if (!openPopups.size && event.relatedTarget && !toolbar.contains(event.relatedTarget) && !toolbar.matches(":hover")) queueLeave();
   }
   function onDragStart() { dragging = true; clear(true); }
   function onDragEnd() { dragging = false; }
   function onPopupShowing(event) {
+    cancelPendingLeave();
     openPopups.add(event.target);
     // Freeze the native folder anchor during opening; collapse after close.
     if (raf) window.cancelAnimationFrame(raf);
