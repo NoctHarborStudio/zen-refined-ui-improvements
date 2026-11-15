@@ -109,3 +109,11 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] Hard navigations retain first-paint / low-resolution changed-pixel detection, but require distinct document identity.
 - [ ] Late pointer messages cannot capture the incoming route as the outgoing snapshot; compare source URI.
 - [ ] Re-test video → feed, feed → video, two videos with a reused player, dynamic canvases, animated image feeds, and normal links in Zen. Structural comparison is heuristic and bounded; no general SPA route-completion API exists.
+
+### Preview.5: early hybrid SPA reveal
+
+- [ ] Initial partial text/layout changes can release the dark shield even with no structural baseline or actor messages, using two stable visual observations.
+- [ ] Existing video/canvas/frame regions are excluded when source geometry is available; changing video pixels alone and global brightness pulses must not qualify in the synthetic checks.
+- [ ] Actor-confirmed visible content releases the shield independently of snapshots and is checked on the next refresh, without a second full DOM scan.
+- [ ] Ordinary document navigation, timing, ring geometry, CSS and Magnetic Bookmarks remain unchanged.
+- [ ] Real-world SPA changes, especially unreported animations or scene cuts when actor data is unavailable, remain heuristic. Check video → feed and feed → video in Zen.

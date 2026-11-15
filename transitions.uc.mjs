@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedRouteReveal";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedRouteRevealParent.sys.mjs";
+const ACTOR = "ZenRefinedHybridReveal";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedHybridRevealParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -26,9 +26,10 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
-  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.4]', ...args);
+  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.5]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
+  const scenes = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
   const debug = (...args) => { if (prefs.getBoolPref(PREFIX + "debug", false)) console.debug("[Zen Refined transitions]", ...args); };
   const on = (key, fallback = true) => prefs.getBoolPref(PREFIX + key, fallback);
@@ -75,13 +76,27 @@ function install() {
         bitmap.close?.();
         if(!frame){debug("warm: rejected outgoing frame");return;}
         cached?.bitmap?.close?.();
-        cached={browser:b,uri,global,frame,sample:sampleFrame(frame,frame.width,frame.height),at:now()};
+        cached={browser:b,uri,global,frame,sample:sampleFrame(frame,frame.width,frame.height),scene:sceneFor(b,uri),at:now()};
         debug("warm: cached outgoing viewport",frame.width,frame.height);
       },error=>debug("warm: drawSnapshot rejected",String(error))).finally(()=>{
         warming=false;
         if(cacheEpoch!==epoch)scheduleWarm();
       });
     }catch(error){warming=false;debug("warm: failed",String(error));}
+  }
+  function sceneFor(b,uri){
+    const scene=scenes.get(b);
+    return scene&&stripHash(scene.uri)===stripHash(uri)&&now()-scene.at<2500?scene:null;
+  }
+  function acceptScene(b,global,data){
+    if(typeof data?.uri!=="string"||!Array.isArray(data.dynamic)||data.dynamic.length>128)return null;
+    const dynamic=data.dynamic.filter(r=>Array.isArray(r)&&r.length===4&&r.every(Number.isFinite))
+      .map(r=>r.map(v=>clamp(v,0,1))).filter(r=>r[2]>r[0]&&r[3]>r[1]);
+    const scene={uri:data.uri,dynamic,at:now(),global};
+    // Keep source-route data even when input IPC follows the route change,
+    // but never replace an incoming route's cached scene with old metadata.
+    if(stripHash(data.uri)===stripHash(b.currentURI?.spec))scenes.set(b,scene);
+    return scene;
   }
   function pointer(b) {
     const r=b.getBoundingClientRect();
@@ -216,6 +231,8 @@ function install() {
       from:point(bounds,source.rect),committed:kind==="soft",global:kind==="soft"?b.browsingContext?.currentWindowGlobal:null,
       oldGlobal:oldCache?.global||source.global||null,oldURI,
       oldSample:oldCache?.sample||sampleFrame(backdrop,backdrop.width,backdrop.height),
+      sourceScene:sceneFor(b,oldURI)||oldCache?.scene||null,
+      dynamicMask:makeDynamicMask([...(oldCache?.scene?.dynamic||[]),...(sceneFor(b,oldURI)?.dynamic||[])]),
       firstPaint:null,paintReason:null,visibleAt:null,raf:0,timer:0,lastGeometry:start,
       progress:0,flightMs:260,last:start,rate:1,finalRendered:false,dim:on("dim"),radius:0,
       nextProbe:start+180,probing:false,probeCount:0,probeGeneration:0,probeSample:null,commitAt:kind==="soft"?start:null};
@@ -283,16 +300,49 @@ function install() {
     // layout or a filled video player. Limit false positives from cursor noise.
     return changed>=18&&strong>=5;
   }
+  function makeDynamicMask(rects){
+    const mask=new Uint8Array(64*36);
+    for(const [x0,y0,x1,y1] of rects){
+      // One-cell padding also excludes changing anti-aliased media edges.
+      const left=Math.max(0,Math.floor(x0*64)-1),right=Math.min(64,Math.ceil(x1*64)+1);
+      const top=Math.max(0,Math.floor(y0*36)-1),bottom=Math.min(36,Math.ceil(y1*36)+1);
+      for(let y=top;y<bottom;y++)for(let x=left;x<right;x++)mask[y*64+x]=1;
+    }
+    return mask;
+  }
+  function stableRoutePixels(old,previous,next,mask){
+    if(!old||!previous||!next||next.opaque<.4||next.range<7||next.detail<3)return false;
+    const delta=(a,b,i)=>(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]))/3;
+    const lum=(a,i)=>(a[i]*.299+a[i+1]*.587+a[i+2]*.114);
+    let changed=0,strong=0,edges=0;
+    const a=old.data,b=previous.data,c=next.data;
+    for(let y=0;y<36;y++)for(let x=0;x<64;x++){
+      const k=y*64+x,i=k*4;
+      if(mask?.[k]||a[i+3]<180||b[i+3]<180||c[i+3]<180)continue;
+      const d1=delta(a,b,i),d2=delta(a,c,i);
+      // A new pixel must differ from the outgoing frame AND survive a
+      // second observation. A moving video or brightness pulse is insufficient.
+      if(d1<14||d2<14||delta(b,c,i)>12)continue;
+      changed++;if(Math.min(d1,d2)>40)strong++;
+      for(const n of [x>0?k-1:-1,x<63?k+1:-1,y>0?k-64:-1,y<35?k+64:-1]){
+        if(n<0||mask?.[n])continue;
+        const j=n*4;
+        const before=lum(a,i)-lum(a,j),after=lum(c,i)-lum(c,j),prior=lum(b,i)-lum(b,j);
+        if(Math.abs(after-before)>22&&Math.abs(after-prior)<15){edges++;break;}
+      }
+    }
+    // Small, persistent structural changes are sufficient; no complete
+    // page, loaded image or full DOM fingerprint is required.
+    return changed>=12&&strong>=4&&edges>=6;
+  }
   function probeFirstFrame(s,time){
-    // A same-document URL change does not establish that the old DOM is gone.
-    // Pixel changes in video, canvas, CSS animations or ads are not navigation.
-    // Only a distinct document may use the inexpensive pixel fallback.
-    if(s.kind!=="hard"||active!==s||s.firstPaint!==null||s.probing||time<s.nextProbe||s.probeCount>=12)return;
+    if(active!==s||s.firstPaint!==null||s.probing||time<s.nextProbe||s.probeCount>=14)return;
     const b=s.browser,global=b.browsingContext?.currentWindowGlobal,uri=b.currentURI?.spec;
     if(!s.committed||!global?.drawSnapshot||!isWeb(uri))return;
-    if(!s.oldGlobal||global===s.oldGlobal)return;
+    if(s.kind==="hard"&&(!s.oldGlobal||global===s.oldGlobal))return;
+    if(s.kind==="soft"&&global!==s.global)return;
     if(stripHash(uri)!==stripHash(s.uri))return;
-    s.probing=true;s.probeCount++;s.nextProbe=time+190;
+    s.probing=true;s.probeCount++;s.nextProbe=time+(s.kind==="soft"?100:190);
     const generation=s.probeGeneration;
     const scale=clamp(360/Math.max(s.w,s.h),.06,.4);
     try{
@@ -301,16 +351,20 @@ function install() {
         try{
           if(active!==s||s.firstPaint!==null||s.probeGeneration!==generation||b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri)return;
           const sample=sampleFrame(bitmap,bitmap.width,bitmap.height);
-          if(changedFrame(s.oldSample,sample)){
-            // Different document identity is required before comparing pixels.
-            s.global=global;markPaint(s,"first changed pixels");
-          }else debug("first-frame probe: no visible change",s.probeCount);
+          const soft=s.kind==="soft";
+          const accepted=soft?stableRoutePixels(s.oldSample,s.probeSample,sample,s.dynamicMask):changedFrame(s.oldSample,sample);
+          if(accepted){
+            s.global=global;markPaint(s,soft?"stable new pixels outside dynamic areas":"first changed pixels");
+          }else{
+            if(soft)s.probeSample=sample;
+            debug("first-frame probe: no confirmed visible change",s.probeCount);
+          }
         }finally{bitmap.close?.();}
       },error=>debug("first-frame probe failed",String(error))).finally(()=>{s.probing=false;});
     }catch(error){s.probing=false;debug("first-frame probe failed",String(error));}
   }
   function resetPaint(s){
-    s.firstPaint=null;s.visibleAt=null;s.paintReason=null;s.probeGeneration++;s.probeCount=0;s.nextProbe=now();
+    s.firstPaint=null;s.visibleAt=null;s.paintReason=null;s.probeGeneration++;s.probeCount=0;s.probeSample=null;s.nextProbe=now();
     s.shield.style.opacity="1";
   }
   function render(s,time){
@@ -410,7 +464,7 @@ function install() {
   function receive(b, global, message) {
     if (!safeBrowser(b)) return;
     if (message.name === "History") { history(); return; }
-    if (message.name === "Warm") { warm(b); return; }
+    if (message.name === "Warm") { acceptScene(b,global,message.data);warm(b); return; }
     if (message.name === "Paint") scheduleWarm(250);
     if (message.name === "Origin") {
       const d = message.data;
@@ -420,7 +474,14 @@ function install() {
       historyUntil=0;
       const rect={x:r.left+d.x*sx,y:r.top+d.y*sy};
       recentPointer={browser:b,...rect,at:now()};
-      if(active)return;
+      const scene=acceptScene(b,global,d);
+      if(active){
+        if(scene&&active.kind==="soft"&&active.browser===b&&stripHash(scene.uri)===stripHash(active.oldURI)&&active.firstPaint===null){
+          active.dynamicMask=makeDynamicMask([...(active.sourceScene?.dynamic||[]),...scene.dynamic]);active.sourceScene=scene;
+          active.probeSample=null;active.probeGeneration++;active.nextProbe=now();
+        }
+        return;
+      }
       const sourceURI=typeof d.uri==="string"?d.uri:locations.get(b);
       if(!sourceURI)return;
       remember(b,rect,d.pixels||null,sourceURI);
@@ -439,7 +500,7 @@ function install() {
        message.data.evidence==="route-content"&&stripHash(message.data.oldURI)===stripHash(s.oldURI)&&
        stripHash(message.data.uri)===stripHash(s.uri))markPaint(s,message.data.reason||"SPA visible content");
     if(message.name==="SoftBaselineMissing"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global)
-      debug("SPA baseline unavailable; keep safe dark aperture until native completion");
+      debug("SPA baseline unavailable; using stable visual fallback");
     if(message.name==="Paint"&&s.kind==="hard"&&global===b.browsingContext?.currentWindowGlobal&&
        global!==s.oldGlobal&&stripHash(b.currentURI?.spec)===stripHash(s.uri)){
       s.global=global;markPaint(s,"new document paint");
@@ -580,7 +641,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.4",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.5",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);

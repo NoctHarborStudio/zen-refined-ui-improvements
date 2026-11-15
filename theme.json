@@ -4,7 +4,7 @@
   "description": "Modular visual and usability refinements for Zen Browser: Magnetic Bookmarks and experimental Adaptive Page Transitions.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.3.0-preview.4",
+  "version": "0.3.0-preview.5",
   "style": {
     "chrome": "chrome.css"
   },
@@ -18,7 +18,7 @@
     "transitions"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-15T23:48:00Z",
+  "updatedAt": "2026-11-16T00:05:00Z",
   "fork": [
     "zen"
   ],
