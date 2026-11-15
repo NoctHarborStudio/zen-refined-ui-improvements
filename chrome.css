@@ -83,7 +83,7 @@
   }
 }
 
-/* Adaptive Page Transitions — live content, a liquid drop, no opaque placeholder. */
+/* Adaptive Page Transitions v3 — one liquid silhouette and a live circular aperture. */
 .zr-page-transition {
   position: fixed !important;
   z-index: 2147483000 !important;
@@ -94,57 +94,16 @@
 }
 .zr-page-transition > * {
   position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   pointer-events: none !important;
   margin: 0 !important;
   padding: 0 !important;
 }
-.zr-page-transition-backdrop {
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  visibility: hidden;
-  background: transparent !important;
-}
-.zr-page-transition-shade {
-  inset: 0 !important;
-  background: black;
-  opacity: 0;
-}
-.zr-page-transition-drop {
-  left: -48px !important;
-  top: -48px !important;
-  width: 96px !important;
-  height: 96px !important;
-  border-radius: 50% 55% 55% 50% / 48% 58% 58% 48%;
-  background: radial-gradient(ellipse at 69% 30%,
-    #fff9 0%, #fff2 19%, transparent 47%),
-    linear-gradient(110deg, #8ca9e24d, #c6dbffed 63%, #edf5ff 85%);
-  box-shadow: inset 0 0 0 1px #ffffff9c, 0 0 14px #a8c7ff55, 0 5px 16px #0004;
-  transform-origin: center;
-  will-change: transform, opacity;
-}
-.zr-page-transition-drop::before {
-  content: "";
-  position: absolute;
-  width: 48%;
-  height: 48%;
-  top: 26%;
-  left: -21%;
-  border-radius: 95% 20% 20% 95% / 55% 40% 40% 55%;
-  background: linear-gradient(90deg, transparent, #9bb9e3b0);
-}
-.zr-page-transition-ring {
-  left: -32px !important;
-  top: -32px !important;
-  width: 64px !important;
-  height: 64px !important;
-  border-radius: 50%;
-  border: 1px solid #d7e6ff7a;
-  box-shadow: inset 0 0 4px #d5e5ff60;
-  opacity: 0;
-  transform-origin: center;
-  will-change: transform, opacity;
-}
+.zr-page-transition-backdrop { background: transparent !important; }
+.zr-page-transition-shade { background: black; opacity: 0; }
+.zr-page-transition-art { overflow: hidden !important; }
 @media (prefers-reduced-motion: reduce) {
   .zr-page-transition { display: none !important; }
 }
