@@ -126,3 +126,10 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] DOM region updates can retract obsolete holes; pixel fallback opens local cells only, requires source dynamic metadata, and stops when actor regions arrive.
 - [ ] Native navigation and the 800–4000 ms clock continue independently. Network transfer and stop timings are diagnostics only.
 - [ ] Validate regional mask rendering and Gecko actor paint delivery in actual Zen; no guarantee of SPA semantic identity.
+
+### Preview.7: cold document navigation
+
+- [ ] Distinct non-initial WindowGlobal identity is detected independently of progress-event order. A stale old document is never accepted.
+- [ ] Gecko native FCP, buffered FCP and early visible DOM/paint checks release the hard-navigation shield before DOMContentLoaded or network completion where possible.
+- [ ] A destination snapshot with visible detail is sufficient after document identity is verified; no difference against old page is required.
+- [ ] Verify cold cross-origin navigation and repeated visit in Zen; SPA regional logic is unchanged. Diagnostics record navigation kind, document commit timing and paint reason.

@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedRegionalReveal";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedRegionalRevealParent.sys.mjs";
+const ACTOR = "ZenRefinedDocumentReveal";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedDocumentRevealParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -26,8 +26,8 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
-  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.6]', ...args);
-  const painted = new WeakSet();
+  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.7]', ...args);
+  const painted = new WeakMap();
   const locations = new WeakMap();
   const scenes = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
@@ -234,6 +234,7 @@ function install() {
       w:bounds.width,h:bounds.height,left:bounds.left,top:bounds.top,overlay,cover,backdrop,shade,shield,art,drop,ring,light,dark,
       from:point(bounds,source.rect),committed:kind==="soft",global:kind==="soft"?b.browsingContext?.currentWindowGlobal:null,
       oldGlobal:oldCache?.global||source.global||null,oldURI,
+      watchedGlobal:null,watchAt:-Infinity,documentCommitAt:null,
       oldSample:oldCache?.sample||sampleFrame(backdrop,backdrop.width,backdrop.height),
       sourceScene:sceneFor(b,oldURI)||oldCache?.scene||null,
       dynamicMask:makeDynamicMask([...(oldCache?.scene?.dynamic||[]),...(sceneFor(b,oldURI)?.dynamic||[])]),
@@ -393,15 +394,45 @@ function install() {
     if(s.firstPaint===null)markPaint(s,reason,true);
     else{s.visibleAt=now();s.paintReason=reason;}
   }
+  function differentDocument(old,current){
+    if(!old||!current||old===current)return false;
+    const a=old.innerWindowId,b=current.innerWindowId;
+    return a==null||b==null||a!==b;
+  }
+  function newDocument(s,global){
+    if(s.kind!=="hard"||!differentDocument(s.oldGlobal,global)||global.isInitialDocument===true||
+       global.isUncommittedInitialDocument===true||global.isClosed===true||global.isCurrentGlobal===false)return false;
+    const uri=global.documentURI?.spec||s.browser.currentURI?.spec;
+    return isWeb(uri)&&(stripHash(uri)===stripHash(s.uri)||
+      (s.committed&&stripHash(uri)===stripHash(s.browser.currentURI?.spec)));
+  }
+  function syncDocument(s,time){
+    if(active!==s||s.kind!=="hard")return;
+    const g=s.browser.browsingContext?.currentWindowGlobal;
+    if(!newDocument(s,g))return;
+    if(s.global!==g){
+      if(s.global&&s.global!==s.oldGlobal)resetPaint(s);
+      s.global=g;s.watchedGlobal=null;s.documentCommitAt=time;s.nextProbe=time;
+    }
+    s.committed=true;s.commitAt=s.commitAt??time;
+    s.uri=g.documentURI?.spec||s.browser.currentURI?.spec||s.uri;
+    const evidence=painted.get(g);
+    if(evidence&&s.firstPaint===null){markPaint(s,evidence);return;}
+    if(s.firstPaint!==null)return;
+    if(s.watchedGlobal!==g||time-s.watchAt>=180){
+      s.watchedGlobal=g;s.watchAt=time;
+      try{g.getActor(ACTOR).sendAsyncMessage("WatchHard",{token:s.token});}catch{}
+    }
+  }
   function probeFirstFrame(s,time){
     if(active!==s||s.fullReveal||s.probing||time<s.nextProbe||s.probeCount>=14||
        (s.kind==="hard"&&s.firstPaint!==null)||(s.kind==="soft"&&s.actorRegions))return;
     const b=s.browser,global=b.browsingContext?.currentWindowGlobal,uri=b.currentURI?.spec;
     if(!s.committed||!global?.drawSnapshot||!isWeb(uri))return;
-    if(s.kind==="hard"&&(!s.oldGlobal||global===s.oldGlobal))return;
+    if(s.kind==="hard"&&!newDocument(s,global))return;
     if(s.kind==="soft"&&global!==s.global)return;
-    if(stripHash(uri)!==stripHash(s.uri))return;
-    s.probing=true;s.probeCount++;s.nextProbe=time+(s.kind==="soft"?100:190);
+    if(s.kind==="soft"&&stripHash(uri)!==stripHash(s.uri))return;
+    s.probing=true;s.probeCount++;s.nextProbe=time+100;
     const generation=s.probeGeneration;
     const scale=clamp(360/Math.max(s.w,s.h),.06,.4);
     try{
@@ -419,8 +450,9 @@ function install() {
               setRegions(s,mask,"regional pixel fallback");
             }
             s.probeSample=sample;
-          }else if(changedFrame(s.oldSample,sample)){
-            s.global=global;markPaint(s,"first changed pixels");
+          }else if(sample&&sample.opaque>.4&&sample.range>=7&&sample.detail>=3){
+            // A distinct destination document needs no comparison with the old site.
+            s.global=global;markPaint(s,"new document visible pixels");
           }
         }finally{bitmap.close?.();}
       },error=>debug("first-frame probe failed",String(error))).finally(()=>{s.probing=false;});
@@ -473,6 +505,7 @@ function install() {
     }
     const elapsed=Math.max(0,time-s.start);
     if(s.finalRendered)return finish(s,"complete");
+    syncDocument(s,time);
     probeFirstFrame(s,time);
     if(elapsed>=s.flightMs){
       const dt=Math.max(0,time-Math.max(s.last,s.start+s.flightMs));
@@ -516,8 +549,9 @@ function install() {
     if(active!==s)return;
     active=null;window.cancelAnimationFrame(s.raf);window.clearTimeout(s.timer);
     if(s.kind==="soft"){try{getActor(s.browser)?.sendAsyncMessage("CancelSoft");}catch{}}
+    else if(s.watchedGlobal){try{s.watchedGlobal.getActor(ACTOR).sendAsyncMessage("CancelHard",{token:s.token});}catch{}}
     s.overlay.remove();
-    lastResult={reason,elapsed:Math.round(now()-s.start),progress:Math.round(s.progress*1000)/1000,committed:s.committed,painted:s.firstPaint!==null,firstPaintMs:s.firstPaint===null?null:Math.round(s.firstPaint-s.start),paintReason:s.paintReason,probeCount:s.probeCount,regionCount:s.regionCount,fullReveal:s.fullReveal,networkDataMs:s.networkDataAt===null?null:Math.round(s.networkDataAt-s.start),networkStopMs:s.networkStopAt===null?null:Math.round(s.networkStopAt-s.start)};
+    lastResult={kind:s.kind,reason,documentCommitMs:s.documentCommitAt===null?null:Math.round(s.documentCommitAt-s.start),elapsed:Math.round(now()-s.start),progress:Math.round(s.progress*1000)/1000,committed:s.committed,painted:s.firstPaint!==null,firstPaintMs:s.firstPaint===null?null:Math.round(s.firstPaint-s.start),paintReason:s.paintReason,probeCount:s.probeCount,regionCount:s.regionCount,fullReveal:s.fullReveal,networkDataMs:s.networkDataAt===null?null:Math.round(s.networkDataAt-s.start),networkStopMs:s.networkStopAt===null?null:Math.round(s.networkStopAt-s.start)};
     debug("finish",lastResult);scheduleWarm(350);
   }
   function cancel(){
@@ -553,14 +587,16 @@ function install() {
       if(pending?.browser===b && now()-pending.at<180 && !active){
         const p=pending;
         const st=begin(b,p.kind,p.uri);
-        if(st&&p.committed){st.committed=true;st.commitAt=now();st.global=b.browsingContext?.currentWindowGlobal;
-          if(st.kind==="hard"&&st.global&&st.global!==st.oldGlobal&&painted.has(st.global))markPaint(st,"buffered paint");}
+        if(st&&p.committed){st.committed=true;st.commitAt=now();
+          if(st.kind==="hard")syncDocument(st,now());}
       }
       return;
     }
-    if (message.name === "Paint") painted.add(global);
-    const s = active;
-    if (!s || s.browser !== b || !s.committed) return;
+    if(message.name==="Paint")painted.set(global,message.data?.reason||"document first paint");
+    const s=active;
+    if(!s||s.browser!==b)return;
+    if(s.kind==="hard")syncDocument(s,now());
+    if(!s.committed)return;
     if(message.name==="SoftRegions"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global&&
        stripHash(message.data.oldURI)===stripHash(s.oldURI)&&stripHash(message.data.uri)===stripHash(s.uri)&&!s.fullReveal){
       const data=message.data;
@@ -574,9 +610,8 @@ function install() {
     }
     if(message.name==="SoftBaselineMissing"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global)
       debug("SPA baseline unavailable; using stable visual fallback");
-    if(message.name==="Paint"&&s.kind==="hard"&&global===b.browsingContext?.currentWindowGlobal&&
-       global!==s.oldGlobal&&stripHash(b.currentURI?.spec)===stripHash(s.uri)){
-      s.global=global;markPaint(s,"new document paint");
+    if(message.name==="Paint"&&s.kind==="hard"&&global===b.browsingContext?.currentWindowGlobal&&newDocument(s,global)){
+      s.global=global;markPaint(s,message.data?.reason||"new document paint");
     }
   }
   function requestURL(request, b) {
@@ -627,17 +662,14 @@ function install() {
       } else if (active?.browser === b && active.kind === "hard") {
         active.committed = true;
         active.commitAt=active.commitAt??now();
-        const next=b.browsingContext?.currentWindowGlobal;
-        if(next!==active.global&&active.global){resetPaint(active);}
-        active.global=next;
         active.uri=uri;
-        if(active.global&&active.global!==active.oldGlobal&&painted.has(active.global))markPaint(active,"buffered paint");
+        syncDocument(active,now());
       } else if (origin?.browser === b || (cached?.browser===b&&cached.uri===previous)) {
         pending={browser:b,kind:"hard",uri,previous,at:now(),committed:true};
         const s = begin(b, "hard", uri);
         if (s) {
-          s.committed = true; s.commitAt=now();s.global = b.browsingContext?.currentWindowGlobal;
-          if(s.global&&s.global!==s.oldGlobal&&painted.has(s.global))markPaint(s,"buffered paint");
+          s.committed = true; s.commitAt=now();
+          syncDocument(s,now());
         }else{window.clearTimeout(pendingTimer);pendingTimer=window.setTimeout(clearPending,180);}
       }
       if(!active)scheduleWarm(350);
@@ -716,7 +748,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.6",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,regionCount:active?.regionCount??null,fullReveal:active?.fullReveal??null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.7",navigationKind:active?.kind??null,documentCommitted:active?.documentCommitAt!=null,destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,regionCount:active?.regionCount??null,fullReveal:active?.fullReveal??null,progress:active?.progress??null,radius:active?.radius??null,firstPaintReason:active?.paintReason??null,probeCount:active?.probeCount??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
