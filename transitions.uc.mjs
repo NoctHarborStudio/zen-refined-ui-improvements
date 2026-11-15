@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedCachedTransition";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedCachedTransitionParent.sys.mjs";
+const ACTOR = "ZenRefinedVerifiedTransition";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedVerifiedTransitionParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -26,13 +26,13 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0;
-  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.4]', ...args);
+  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.5]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
   const debug = (...args) => { if (prefs.getBoolPref(PREFIX + "debug", false)) console.debug("[Zen Refined transitions]", ...args); };
   const on = (key, fallback = true) => prefs.getBoolPref(PREFIX + key, fallback);
-  const maxTime = () => clamp(prefs.getIntPref(PREFIX + "timeout", 4000), 500, 4000);
+  const maxTime = () => clamp(prefs.getIntPref(PREFIX + "timeout", 4000), 1000, 4000);
   const now = () => window.performance.now();
   function safeBrowser(b) {
     return enabled && !motion.matches && b === gb.selectedBrowser &&
@@ -55,7 +55,7 @@ function install() {
   }
   function warm(b, force=false) {
     if(!safeBrowser(b)||!on("snapshot")||active||pending||warming||!isWeb(b.currentURI?.spec))return;
-    if(!force && now()-lastWarm<550)return;
+    if(now()-lastWarm<(force?350:1000))return;
     const bounds=b.getBoundingClientRect(), global=b.browsingContext?.currentWindowGlobal, uri=b.currentURI.spec;
     if(!global?.drawSnapshot){debug("warm: drawSnapshot unavailable");return;}
     const scale=clamp(1900/Math.max(bounds.width,bounds.height),.12,1), epoch=cacheEpoch;
@@ -96,6 +96,33 @@ function install() {
     if (origin) { origin.expired = true; origin.bitmap?.close?.(); origin.bitmap = null; origin.pixels=null; }
     origin = null;
   }
+  function fingerprint(image,width,height){
+    try{
+      const canvas=document.createElementNS(NS,"canvas");canvas.width=32;canvas.height=18;
+      const c=canvas.getContext("2d",{willReadFrequently:true});
+      c.drawImage(image,0,0,width,height,0,0,32,18);
+      const data=c.getImageData(0,0,32,18).data;
+      let count=0,detail=0,centerLight=0,centerCount=0;
+      const rgb=new Uint8Array(32*18*3);
+      for(let y=0;y<18;y++)for(let x=0;x<32;x++){
+        const i=y*32+x,j=i*4,k=i*3;
+        if(data[j+3]>=220)count++;
+        rgb[k]=data[j];rgb[k+1]=data[j+1];rgb[k+2]=data[j+2];
+        if(x>0){const p=k-3;if(Math.abs(rgb[k]-rgb[p])+Math.abs(rgb[k+1]-rgb[p+1])+Math.abs(rgb[k+2]-rgb[p+2])>45)detail++;}
+        if(x>=3&&x<=20&&y>=3&&y<=13){centerCount++;if(Math.max(rgb[k],rgb[k+1],rgb[k+2])>25)centerLight++;}
+      }
+      return {rgb,opaque:count/576,detail:detail/576,center: centerLight/centerCount};
+    }catch{return null;}
+  }
+  function difference(a,b){
+    if(!a||!b)return 0;
+    let sum=0,changed=0;
+    for(let i=0;i<a.rgb.length;i+=3){
+      const delta=(Math.abs(a.rgb[i]-b.rgb[i])+Math.abs(a.rgb[i+1]-b.rgb[i+1])+Math.abs(a.rgb[i+2]-b.rgb[i+2]))/3;
+      sum+=delta;if(delta>18)changed++;
+    }
+    return {mean:sum/576,changed:changed/576};
+  }
   function validPixels(ctx, width, height) {
     try {
       const sample = document.createElementNS(NS,"canvas");
@@ -109,7 +136,7 @@ function install() {
         opaque++; const v=(pixels[i]+pixels[i+1]+pixels[i+2])/3;
         lo=Math.min(lo,v);hi=Math.max(hi,v);
       }
-      return opaque>=60 && hi-lo>=8;
+      return opaque>=94 && hi-lo>=8;
     } catch {return false;}
   }
   function capture(b,rec) {
@@ -200,23 +227,25 @@ function install() {
     const drop=svg("path",{fill:"url(#zr-morph-drop-fill)",stroke:"#969696","stroke-width":"1.25"});
     art.append(defs,fill,ring,drop);overlay.append(backdrop,shade,art);
     Object.assign(overlay.style,{left:bounds.left+"px",top:bounds.top+"px",width:bounds.width+"px",height:bounds.height+"px"});
-    const start=now(),nominal=clamp(prefs.getIntPref(PREFIX+"duration",700),100,1500);
+    const start=now(),nominal=1000;
     const s={token:++serial,browser:b,kind,uri,start,timeout:maxTime(),nominal,
       w:bounds.width,h:bounds.height,left:bounds.left,top:bounds.top,overlay,backdrop,shade,art,drop,ring,fill,light,dark,
       from:point(bounds,source.rect),committed:kind==="soft",global:kind==="soft"?b.browsingContext?.currentWindowGlobal:null,
-      oldGlobal:b.browsingContext?.currentWindowGlobal,readyAt:null,raf:0,timer:0,last:start,lastGeometry:start,
-      clock:0,rate:1,flightMs:Math.min(280,nominal*.36),dim:on("dim"),youtube:/^https?:\/\/(?:[^/]+\.)?youtube\.com\//i.test(uri)};
+      oldGlobal:oldCache?.global||b.browsingContext?.currentWindowGlobal,readyAt:null,raf:0,timer:0,lastGeometry:start,
+      oldFingerprint:fingerprint(backdrop,backdrop.width,backdrop.height), signal:false, probing:false, nextProbe:start+120, confirmed:0,
+      revealStart:null,revealDuration:0,revealRadius:23,forced:false,flightMs:320,dim:on("dim"),youtube:/^https?:\/\/(?:[^/]+\.)?youtube\.com\//i.test(uri)};
     active=s;
     try {
       root.append(overlay);
-      render(s);
+      if(s.dim)backdrop.style.filter="brightness(.94)";
+      render(s,start);
       s.timer=window.setTimeout(()=>finish(s,"timeout"),s.timeout);
       s.raf=window.requestAnimationFrame(t=>tick(s,t));
       debug("start",kind,"validated snapshot");
       if(kind==="soft"){
         const actor=getActor(b);
         try{actor?.sendAsyncMessage("WatchSoft",{token:s.token});}catch{}
-        s.softTimer=window.setTimeout(()=>markReady(s),Math.min(s.timeout-30,s.youtube?2800:1400));
+        // The actor provides a hint, never a timer-based declaration of readiness.
       }
       return s;
     }catch(error){finish(s,"setup-error");console.warn("[Zen Refined transitions]",error);return null;}
@@ -227,10 +256,13 @@ function install() {
       " C "+(r*k)+" "+(-h)+" "+r+" "+(-h*k)+" "+r+" 0 C "+r+" "+(h*k)+" "+(r*k)+" "+h+" 0 "+h+
       " C "+(-r*k)+" "+h+" "+(-tail)+" "+(h*k*(1-stretch*.7))+" "+(-tail)+" 0 Z";
   }
-  function render(s){
-    const flight=clamp(s.clock/s.flightMs,0,1);
+  function waitingRadius(elapsed){
+    // Continuous small expansion during slow loading, not a giant empty hole.
+    return 23+26*(1-Math.exp(-Math.max(0,elapsed)/950));
+  }
+  function render(s,time){
+    const elapsed=Math.max(0,time-s.start),flight=clamp(elapsed/s.flightMs,0,1);
     const f=ease(flight),cx=s.w/2,cy=s.h/2;
-    const t=clamp((s.clock-s.flightMs)/(s.nominal-s.flightMs),0,1);
     if(flight<1){
       const dx=cx-s.from.x,dy=cy-s.from.y,d=Math.hypot(dx,dy)||1;
       const bend=Math.min(25,d*.045)*Math.sin(Math.PI*f);
@@ -242,27 +274,64 @@ function install() {
       s.drop.setAttribute("transform","translate("+x+" "+y+") rotate("+(Math.atan2(dy,dx)*180/Math.PI)+")");
       s.light.setAttribute("stop-color","rgb("+light+","+light+","+light+")");
       s.dark.setAttribute("stop-color","rgb("+dark+","+dark+","+dark+")");
-      s.shade.style.opacity=String(s.dim?.08*f:0);
       return;
     }
-    // At exactly the endpoint of the flight the drop is a radius-23 circle.
-    // The mask opens on that SAME frame, then grows monotonically.
-    const growth=1-Math.pow(1-t,3)*(1+3*t);
-    const radius=lerp(23,Math.hypot(cx,cy)+3,growth);
-    const mask="radial-gradient(circle at 50% 50%, transparent "+Math.max(0,radius-.7)+"px, black "+(radius+.7)+"px)";
-    s.backdrop.style.maskImage=mask;
-    s.shade.style.maskImage=mask;
-    s.shade.style.opacity=String(s.dim?.08*(1-t):0);
     s.drop.setAttribute("opacity","0");
+    const t=s.revealStart===null?0:clamp((time-s.revealStart)/s.revealDuration,0,1);
+    const radius=s.revealStart===null?waitingRadius(elapsed-s.flightMs):
+      lerp(s.revealRadius,Math.hypot(cx,cy)+8,1-Math.pow(1-t,3)*(1+3*t));
+    // Only expose the live destination once verified (or during the bounded
+    // timeout exit). Before that the old frame remains completely opaque.
+    if(s.revealStart!==null){
+      s.backdrop.style.maskImage="radial-gradient(circle at 50% 50%, transparent "+Math.max(0,radius-.8)+"px, black "+(radius+.8)+"px)";
+      if(t>.82&&s.dim)s.backdrop.style.filter="brightness("+lerp(.94,1,ease((t-.82)/.18))+")";
+    }
     s.fill.setAttribute("r",String(radius));
-    s.fill.setAttribute("opacity",String(1-ease(t/.13)));
+    s.fill.setAttribute("opacity",String(s.revealStart===null?1:1-ease(t/.15)));
     s.ring.setAttribute("r",String(radius));
-    s.ring.setAttribute("opacity",String(1-ease((t-.82)/.18)));
+    s.ring.setAttribute("opacity",String(1-ease((t-.86)/.14)));
+  }
+  function beginReveal(s,time,forced=false){
+    if(s.revealStart!==null)return;
+    const elapsed=time-s.start;
+    s.revealStart=time;s.forced=forced;s.revealRadius=waitingRadius(elapsed-s.flightMs);
+    s.revealDuration=Math.max(1,Math.min(s.timeout-elapsed,Math.max(540,1000-elapsed)));
+    debug("reveal",forced?"deadline fallback":"verified destination",Math.round(elapsed)+"ms");
+  }
+  function probe(s,time){
+    if(active!==s||s.readyAt!==null||s.probing||!s.committed||time<s.nextProbe)return;
+    const b=s.browser,global=b.browsingContext?.currentWindowGlobal,uri=b.currentURI?.spec;
+    if(!global?.drawSnapshot||!isWeb(uri)||stripHash(uri)!==stripHash(s.uri))return;
+    if(s.kind==="hard"&&global===s.oldGlobal&&s.oldGlobal)return;
+    // A cheap low-resolution probe. Two changed, non-blank observations
+    // avoid accepting an old document, a transient paint or a black player.
+    s.probing=true;s.nextProbe=time+170;
+    const scale=clamp(420/Math.max(s.w,s.h),.08,.5);
+    try{
+      global.drawSnapshot(null,scale,"transparent",{drawView:true}).then(bitmap=>{
+        if(!bitmap)return;
+        try{
+          if(active!==s||global!==b.browsingContext?.currentWindowGlobal||uri!==b.currentURI?.spec)return;
+          const fp=fingerprint(bitmap,bitmap.width,bitmap.height);
+          const diff=difference(s.oldFingerprint,fp);
+          const watch=s.youtube&&/\/watch(?:\?|$)/.test(uri);
+          const valid=fp&&fp.opaque>.97&&fp.detail>.025&&diff&&diff.mean>5&&diff.changed>.09&&(!watch||fp.center>.12);
+          if(valid){
+            s.confirmed++;
+            // An actor/network hint plus one actual changed frame is not
+            // sufficient: always require two visual samples.
+            if(s.confirmed>=2){
+              s.readyAt=now();debug("destination verified",Math.round(s.readyAt-s.start)+"ms",Math.round(diff.changed*100)+"% changed");
+            }
+          }else{s.confirmed=0;debug("destination not ready",diff?Math.round(diff.changed*100)+"% changed":"no pixels");}
+        }finally{bitmap.close?.();}
+      },error=>debug("destination probe failed",String(error))).finally(()=>{s.probing=false;});
+    }catch{s.probing=false;}
   }
   function tick(s,time){
     if(active!==s)return;
     if(!enabled||motion.matches||s.browser!==gb.selectedBrowser)return finish(s,"context");
-    if(time-s.lastGeometry>125){
+    if(time-s.lastGeometry>200){
       s.lastGeometry=time;
       if(!safeBrowser(s.browser))return finish(s,"context");
       const r=s.browser.getBoundingClientRect();
@@ -271,25 +340,21 @@ function install() {
     }
     const elapsed=Math.max(0,time-s.start);
     if(elapsed>=s.timeout)return finish(s,"timeout");
-    const dt=Math.max(0,time-s.last);s.last=time;
-    // A single virtual clock controls both phases: it never pauses at center.
-    // Normal loads use 700ms; early readiness accelerates, an unready page
-    // slows the reveal but never stops it or artificially delays the network.
-    const ready=s.readyAt!==null;
-    let target=ready?(s.readyAt-s.start<110?2.8:1.15):(s.clock<s.flightMs?1:.43);
-    const minimum=(s.nominal-s.clock)/Math.max(1,s.timeout-elapsed-16);
-    target=Math.max(target,minimum,.12);
-    const oldRate=s.rate,decay=Math.exp(-dt/55);
-    s.rate=target+(oldRate-target)*decay;
-    s.clock=Math.min(s.nominal,s.clock+target*dt+(oldRate-target)*55*(1-decay));
-    if(s.clock>=s.nominal)return finish(s,"complete");
-    render(s);
+    if(s.revealStart===null){
+      probe(s,time);
+      if(elapsed>=s.flightMs&&(s.readyAt!==null||elapsed>=s.timeout-560))
+        beginReveal(s,time,s.readyAt===null);
+    }
+    render(s,time);
+    if(s.revealStart!==null&&time-s.revealStart>=s.revealDuration&&elapsed>=1000)
+      return finish(s,"complete");
     s.raf=window.requestAnimationFrame(t=>tick(s,t));
   }
   function markReady(s){
-    if(active!==s||s.readyAt!==null)return;
-    s.readyAt=now();
-    debug("ready",Math.round(s.readyAt-s.start)+"ms");
+    if(active!==s)return;
+    s.signal=true;
+    s.nextProbe=Math.min(s.nextProbe,now());
+    debug("navigation readiness hint",Math.round(now()-s.start)+"ms");
   }
   function finish(s,reason){
     if(active!==s)return;
@@ -341,7 +406,7 @@ function install() {
       if (flags & P.STATE_START) {
         if (!safeBrowser(b)) return;
         const uri = requestURL(request, b);
-        if (active?.browser === b && active.kind === "hard" && !active.committed) return;
+        if(active?.browser===b&&active.kind==="hard"){debug("additional network start");return;}
         pending={browser:b,kind:"hard",uri,previous:locations.get(b),at:now(),committed:false};
         if(!begin(b,"hard",uri)){
           window.clearTimeout(pendingTimer);pendingTimer=window.setTimeout(clearPending,180);
@@ -349,8 +414,8 @@ function install() {
       } else if (flags & P.STATE_STOP) {
         scheduleWarm(250);
         if (active?.browser !== b || active.kind !== "hard") return;
-        if (Components.isSuccessCode(status) && active.committed) markReady(active);
-        else finish(active, "network-stop");
+        if(Components.isSuccessCode(status)&&active.committed)markReady(active);
+        else debug("network stop before destination verified",status);
       }
     },
     onLocationChange(b, wp, request, location, flags) {
@@ -363,7 +428,10 @@ function install() {
       const same = !!(flags & P.LOCATION_CHANGE_SAME_DOCUMENT);
       if (same) {
         if (previous && stripHash(previous) === stripHash(uri)) return;
-        if (active?.kind === "hard") return;
+        if(active?.browser===b){
+          if(active.uri!==uri){active.uri=uri;active.confirmed=0;active.readyAt=null;active.nextProbe=now();}
+          return;
+        }
         if(on("soft")){
           pending={browser:b,kind:"soft",uri,previous,at:now(),committed:true};
           if(!begin(b,"soft",uri)){
@@ -374,6 +442,7 @@ function install() {
       } else if (active?.browser === b && active.kind === "hard") {
         active.committed = true;
         active.global = b.browsingContext?.currentWindowGlobal;
+        if(active.uri!==uri){active.confirmed=0;active.readyAt=null;active.nextProbe=now();}
         active.uri = uri;
         if (active.global && active.global !== active.oldGlobal && painted.has(active.global)) markReady(active);
       } else if (origin?.browser === b || (cached?.browser===b&&cached.uri===previous)) {
@@ -442,10 +511,10 @@ function install() {
     log("settings", {enabled, snapshot:on("snapshot"), reducedMotion:motion.matches});
     if(enabled&&on("snapshot"))scheduleWarm(200);
   }
-  const tabEvents = ["TabSelect", "TabClose"];
+  const tabEvents = ["TabSelect"];
   const windowEvents = [["pointerdown", chromePointer, true], ["pointermove",move,true], ["keydown", key, true], ["command",command,true],
     ["resize", cancel, false], ["deactivate", cancel, false], ["beforecustomization", cancel, false],
-    ["fullscreen", cancel, false], ["popupshowing", cancel, true]];
+    ["fullscreen", cancel, false]];
   function destroy() {
     if (dead) return;
     dead = true;
@@ -460,7 +529,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.2.0-preview.5",destinationVerified:active?.readyAt!==null&&!!active,revealing:active?.revealStart!==null&&!!active});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
