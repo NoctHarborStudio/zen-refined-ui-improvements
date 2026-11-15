@@ -34,3 +34,11 @@ Enable the module explicitly in Sine. Test in Zen 1.24.2b / Sine 2.3.3, with and
 - [ ] Verify actor loads in remote content and snapshot geometry matches zoomed pages. SPA readiness and snapshot timing are heuristic; protected content may not be captured.
 
 No browser integration testing has been performed for this preview.
+
+## Liquid transition regression checks (preview.2)
+
+- [ ] Click each corner of a YouTube thumbnail, a text link, and a bookmark: the drop begins at the actual click, not the element center.
+- [ ] With snapshots off, no grey card or blank backdrop is ever painted; the live site is visible throughout.
+- [ ] Click YouTube videos with a long/slow player initialization: prefer yt-navigate-finish when available; hard fallback remains bounded.
+- [ ] Compare 60/120/180 Hz: time-based flight and reveal should have consistent duration; no width/height animation or forced per-frame layout.
+- [ ] Navigate immediately after mouse-down, across origins, with a blank/failed snapshot: no late outgoing capture may replace the destination.
