@@ -26,7 +26,7 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
-  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.6]', ...args);
+  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.7]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
@@ -290,8 +290,10 @@ function install() {
     const elapsed=time-s.start;
     // Reserve a compositor frame at the deadline; 800ms is the minimum,
     // not a prediction of network duration.
-    const earliest=Math.max(s.start+s.nominal,time+(forced?0:Math.max(180,440*(1-s.progress))));
     const deadline=s.start+s.timeout-20;
+    // A forced completion consumes the reserved final interval. It must
+    // never set the end to "now": that made a slow transition jump at 70%.
+    const earliest=forced?deadline:Math.max(s.start+s.nominal,time+Math.max(180,440*(1-s.progress)));
     const end=Math.max(time+1,Math.min(deadline,earliest));
     const duration=end-time;
     // Cubic Hermite continuity: carry the current expansion velocity into
@@ -307,7 +309,7 @@ function install() {
     if(Math.abs(r.width-s.w)<.5&&Math.abs(r.height-s.h)<.5&&Math.abs(r.left-s.left)<.5&&Math.abs(r.top-s.top)<.5)return true;
     // Compact mode / sidebar layout may move by a few pixels. Re-anchor
     // instead of deleting an in-progress mask and flashing the full page.
-    s.from={x:clamp(s.from.x+r.left-s.left,0,r.width),y:clamp(s.from.y+r.top-s.top,0,r.height)};
+    s.from={x:clamp(s.from.x+s.left-r.left,0,r.width),y:clamp(s.from.y+s.top-r.top,0,r.height)};
     s.w=r.width;s.h=r.height;s.left=r.left;s.top=r.top;
     Object.assign(s.overlay.style,{left:r.left+"px",top:r.top+"px",width:r.width+"px",height:r.height+"px"});
     s.art.setAttribute("viewBox","0 0 "+s.w+" "+s.h);
@@ -545,7 +547,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.2.0-preview.6",destinationReady:active?.readyAt!=null,revealing:active?.showAt!=null,progress:active?.progress??null,lastResult});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.2.0-preview.7",destinationReady:active?.readyAt!=null,revealing:active?.showAt!=null,progress:active?.progress??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);

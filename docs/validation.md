@@ -74,3 +74,7 @@ No browser integration testing has been performed for this preview.
 - [ ] Small geometry changes re-anchor the overlay instead of cancelling; no abrupt removal at 70%.
 - [ ] Diagnostics lastResult records reason, elapsed, and progress for every exit. Native back/forward and explicit cancellation stay immediate.
 - [ ] Compare live rendering on YouTube, Reddit, GitHub and Steam; actual WebRender behavior still requires browser testing.
+
+## Preview.7 deadline regression
+
+The deadline completion must interpolate across the reserved final interval, never jump immediately to full radius. Simulated controller checks at 60, 120 and 180 Hz verify monotonic progress, 800 ms minimum, bounded 4 s deadline, and no destination captures. Real browser validation remains necessary.
