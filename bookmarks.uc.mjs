@@ -26,6 +26,7 @@ function install() {
   const bool = (key, fallback) => prefs.getBoolPref(PREFIX + key, fallback);
   const state = new Map();
   let active = null, pointerX = null, dragging = false, dead = false;
+  const openPopups = new Set();
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
   let settings = {};
@@ -115,6 +116,7 @@ function install() {
       item.style.removeProperty(key);
     }
     state.delete(item);
+    if (!state.size) toolbar.removeAttribute("data-zr-bm-room");
   }
 
   function collapse(item, immediately = false) {
@@ -255,11 +257,11 @@ function install() {
     raf = 0; last = 0; vx = 0;
     if (previous) collapse(previous, immediately);
     if (immediately) for (const item of [...state.keys()]) forget(item);
-    toolbar.removeAttribute("data-zr-bm-room");
+    if (immediately || !state.size) toolbar.removeAttribute("data-zr-bm-room");
   }
 
   function onPointerMove(event) {
-    if (event.pointerType === "touch" || !toolbarVisible() || event.buttons) return;
+    if (event.pointerType === "touch" || !toolbarVisible() || event.buttons || openPopups.size) return;
     // Handle the actual native hit target. Do not synthesize clicks or
     // react to pointerenter events generated solely by animated layout.
     const item = event.target?.closest?.("toolbarbutton.bookmark-item");
@@ -279,24 +281,28 @@ function install() {
     clear();
   }
 
-  function onPointerLeave() { clear(); }
+  function onPointerLeave() { if (!openPopups.size) clear(); }
   function onFocus(event) {
     const item = event.target?.closest?.("toolbarbutton.bookmark-item");
     if (eligible(item) && item.matches(":focus-visible")) select(item, null);
   }
   function onFocusOut(event) {
-    if (event.relatedTarget && !toolbar.contains(event.relatedTarget) && !toolbar.matches(":hover")) clear();
+    if (!openPopups.size && event.relatedTarget && !toolbar.contains(event.relatedTarget) && !toolbar.matches(":hover")) clear();
   }
   function onDragStart() { dragging = true; clear(true); }
   function onDragEnd() { dragging = false; }
-  function onPopupShowing() {
+  function onPopupShowing(event) {
+    openPopups.add(event.target);
     // Freeze the native folder anchor during opening; collapse after close.
     if (raf) window.cancelAnimationFrame(raf);
     raf = 0;
     indicator.removeAttribute("data-zr-visible");
     shown = false;
   }
-  function onPopupHidden() { clear(true); }
+  function onPopupHidden(event) {
+    openPopups.delete(event.target);
+    if (!openPopups.size) clear(true);
+  }
   function onKey(event) { if (event.key === "Escape") clear(); }
 
   const observer = new MutationObserver(() => {
@@ -338,6 +344,7 @@ function install() {
     if (refreshFrame) window.cancelAnimationFrame(refreshFrame);
     observer.disconnect();
     resize.disconnect();
+    openPopups.clear();
     for (const [target, type, listener, capture] of listeners) target.removeEventListener(type, listener, capture);
     try { prefs.removeObserver(PREFIX, prefsObserver); } catch {}
     motion.removeEventListener("change", prefsObserver);
