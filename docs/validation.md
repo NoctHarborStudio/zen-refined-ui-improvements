@@ -58,3 +58,11 @@ No browser integration testing has been performed for this preview.
 - [ ] Move pointer over page and click quickly; cached outgoing viewport is used even when actor input arrives late or is unavailable.
 - [ ] No capture of destination may replace the outgoing frame after a URL change; cache is invalidated on tab changes and unload.
 - [ ] Test without actor, with disabled capture, and with history traversal; no false history animation from cached source.
+
+## Preview.5 verified destination / minimum duration
+
+- [ ] Fast cached navigation: full transition never completes before 1000 ms, even when paint/network signals arrive immediately.
+- [ ] Old/uniform/black destination frames do not start full reveal; two visually changed nonblank frames are required.
+- [ ] Slow page: small gray aperture grows until readiness, then full reveal; deadline exit finishes by 4000 ms.
+- [ ] Reddit, GitHub, YouTube home→watch, direct URL: no premature full reveal or old page inside the circle; actual browser testing required.
+- [ ] Intermediate network stops/redirects and background-tab closing must not abruptly remove the effect.
