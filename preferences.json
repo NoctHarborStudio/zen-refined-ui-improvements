@@ -98,5 +98,71 @@
     "property": "zen.refined.bookmarks.glow",
     "label": "Indicator glow",
     "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.transitions.enabled",
+    "label": "Enable Adaptive Page Transitions (experimental)",
+    "defaultValue": false
+  },
+  {
+    "type": "dropdown",
+    "property": "zen.refined.transitions.timeout",
+    "label": "Page transition time limit",
+    "value": "number",
+    "defaultValue": 4000,
+    "placeholder": false,
+    "options": [
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "1000 ms",
+        "value": 1000
+      },
+      {
+        "label": "2000 ms",
+        "value": 2000
+      },
+      {
+        "label": "3000 ms",
+        "value": 3000
+      },
+      {
+        "label": "4000 ms",
+        "value": 4000
+      }
+    ]
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.transitions.soft",
+    "label": "Animate same-document / SPA navigation",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.transitions.chrome",
+    "label": "Use bookmark and address-bar origins",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.transitions.snapshot",
+    "label": "Capture outgoing page and clicked element",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.transitions.dim",
+    "label": "Dim outgoing page",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.transitions.debug",
+    "label": "Log transition timing to Browser Console",
+    "defaultValue": false
   }
 ]
