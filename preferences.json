@@ -107,50 +107,12 @@
   },
   {
     "type": "dropdown",
-    "property": "zen.refined.transitions.duration",
-    "label": "Nominal liquid transition duration",
-    "value": "number",
-    "defaultValue": 700,
-    "placeholder": false,
-    "options": [
-      {
-        "label": "100 ms",
-        "value": 100
-      },
-      {
-        "label": "350 ms",
-        "value": 350
-      },
-      {
-        "label": "500 ms",
-        "value": 500
-      },
-      {
-        "label": "700 ms",
-        "value": 700
-      },
-      {
-        "label": "1000 ms",
-        "value": 1000
-      },
-      {
-        "label": "1500 ms",
-        "value": 1500
-      }
-    ]
-  },
-  {
-    "type": "dropdown",
     "property": "zen.refined.transitions.timeout",
-    "label": "Page transition time limit",
+    "label": "Maximum transition duration (minimum 1000 ms)",
     "value": "number",
     "defaultValue": 4000,
     "placeholder": false,
     "options": [
-      {
-        "label": "500 ms",
-        "value": 500
-      },
       {
         "label": "1000 ms",
         "value": 1000
