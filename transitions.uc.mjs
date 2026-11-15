@@ -23,6 +23,9 @@ function install() {
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let active = null, origin = null, originTimer = 0, serial = 0, dead = false;
   let releaseActor = null, enabled = false;
+  const painted = new WeakSet();
+  const locations = new WeakMap();
+  for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
   const debug = (...args) => { if (prefs.getBoolPref(PREFIX + "debug", false)) console.debug("[Zen Refined transitions]", ...args); };
   const on = (key, fallback = true) => prefs.getBoolPref(PREFIX + key, fallback);
   const maxTime = () => clamp(prefs.getIntPref(PREFIX + "timeout", 4000), 500, 4000);
@@ -61,6 +64,13 @@ function install() {
   }
   function remember(b, rect) {
     if (!safeBrowser(b)) return;
+    if (active && active.browser === b && now() - active.start < 110) {
+      if (!active.source?.rect) {
+        active.sourceRect = normalizedRect(b.getBoundingClientRect(), rect);
+        if (active.source) active.source.rect = rect;
+      }
+      return;
+    }
     if (active) finish(active, "interaction");
     clearOrigin();
     origin = { browser: b, rect, at: now(), bitmap: null, expired: false };
@@ -99,7 +109,8 @@ function install() {
     return { x: clamp(rect.x - b.left, 0, b.width - w), y: clamp(rect.y - b.top, 0, b.height - h), w, h };
   }
   function begin(b, kind, uri) {
-    if (!safeBrowser(b) || !isWeb(uri) || (kind === "soft" && !on("soft"))) return null;
+    if (!safeBrowser(b) || !isWeb(uri) || (kind === "soft" && !on("soft")) ||
+        !window.CSS.supports("clip-path", "polygon(evenodd,0 0,100% 0,100% 100%,0 100%)")) return null;
     if (active) finish(active, "superseded");
     const bounds = b.getBoundingClientRect();
     let source = origin?.browser === b && now() - origin.at < 1400 ? origin : null;
@@ -213,6 +224,7 @@ function install() {
       remember(b, { x: r.left + d.x * sx, y: r.top + d.y * sy, w: d.w * sx, h: d.h * sy, content: true });
       return;
     }
+    if (message.name === "Paint") painted.add(global);
     const s = active;
     if (!s || s.browser !== b || !s.committed) return;
     if (message.name === "SoftReady" && s.kind === "soft" && message.data.token === s.token && global === s.global) markReady(s);
@@ -237,12 +249,13 @@ function install() {
       }
     },
     onLocationChange(b, wp, request, location, flags) {
-      if (!wp?.isTopLevel || b !== gb.selectedBrowser) return;
+      if (!wp?.isTopLevel) return;
       const uri = location?.spec || "";
+      const previous = locations.get(b);
+      locations.set(b, uri);
+      if (b !== gb.selectedBrowser) return;
       if (!isWeb(uri) || flags & P.LOCATION_CHANGE_ERROR_PAGE) { cancel(); return; }
       const same = !!(flags & P.LOCATION_CHANGE_SAME_DOCUMENT);
-      const previous = b.__zrTransitionURI;
-      b.__zrTransitionURI = uri;
       if (same) {
         if (previous && stripHash(previous) === stripHash(uri)) return;
         if (active?.kind === "hard") return;
@@ -251,9 +264,13 @@ function install() {
         active.committed = true;
         active.global = b.browsingContext?.currentWindowGlobal;
         active.uri = uri;
+        if (active.global && active.global !== active.oldGlobal && painted.has(active.global)) markReady(active);
       } else if (origin?.browser === b) {
         const s = begin(b, "hard", uri);
-        if (s) { s.committed = true; s.global = b.browsingContext?.currentWindowGlobal; }
+        if (s) {
+          s.committed = true; s.global = b.browsingContext?.currentWindowGlobal;
+          if (s.global && painted.has(s.global)) markReady(s);
+        }
       }
     },
     onProgressChange(b, wp, request, curSelf, maxSelf, curTotal, maxTotal) {
@@ -301,7 +318,6 @@ function install() {
     motion.removeEventListener("change", settings);
     try { releaseActor?.(); } catch {}
     releaseActor = null;
-    for (const b of gb.browsers) { try { delete b.__zrTransitionURI; } catch {} }
   }
   try {
     window[KEY].receive = receive;
