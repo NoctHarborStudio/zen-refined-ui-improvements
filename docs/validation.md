@@ -42,3 +42,12 @@ No browser integration testing has been performed for this preview.
 - [ ] Click YouTube videos with a long/slow player initialization: prefer yt-navigate-finish when available; hard fallback remains bounded.
 - [ ] Compare 60/120/180 Hz: time-based flight and reveal should have consistent duration; no width/height animation or forced per-frame layout.
 - [ ] Navigate immediately after mouse-down, across origins, with a blank/failed snapshot: no late outgoing capture may replace the destination.
+
+## Morph transition checks (preview.3)
+
+- [ ] 700 ms nominal: light gray liquid silhouette from click, grows, turns gray, immediately expands into the live page; no center wait or extra ring animation.
+- [ ] Outside the circular reveal the frozen outgoing page must remain visible, including YouTube home → watch.
+- [ ] No animation on Back/Forward via toolbar, Alt+Left/Right, mouse side buttons, same-document popstate, or navigation without an explicit origin.
+- [ ] Invalid snapshot, disabled capture, or missing actor: native navigation, no floating drop or gray rectangle.
+- [ ] Fast and slow readiness signals: the same virtual timeline advances continuously; check 4s cap and cancellation.
+- [ ] Check snapshot performance and viewport alignment at page zoom, 60/120/180 Hz, and with OnePlane.
