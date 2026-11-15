@@ -1,0 +1,84 @@
+/* Zen Refined — Magnetic Bookmarks
+ * Scoped to the native bookmarks toolbar and installed window controller.
+ * No changes to tab placement or Compact Mode.
+ */
+#zr-bookmark-indicator { display: none !important; }
+#PersonalToolbar[data-zr-magnetic-enabled] {
+  --zr-bm-duration: 240ms;
+  --zr-bm-ease: cubic-bezier(.2, .8, .2, 1);
+  position: relative !important;
+  overflow: visible !important;
+}
+/* OnePlane's compact two-row overlay measures the actual bookmarks height.
+ * Reserve lift room permanently, not only on hover, and leave the upper row
+ * untouched. Standalone Zen uses the adaptive vertical bound in the script.
+ */
+:root[oneplane-active="true"] #PersonalToolbar[data-zr-magnetic-enabled] {
+  box-sizing: border-box !important;
+  padding-top: calc(var(--zr-bm-base-pad-top, 0px) + 8px) !important;
+  min-height: calc(var(--zr-bm-base-height, 24px) + 8px) !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
+  overflow: visible !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
+  position: relative;
+  flex-shrink: 0 !important;
+  transform-origin: center center !important;
+  margin-inline-start: var(--zr-bm-margin-start, 0px) !important;
+  margin-inline-end: var(--zr-bm-margin-end, 0px) !important;
+  scale: 1 1 !important;
+  translate: 0 0 !important;
+  transition:
+    margin-inline-start var(--zr-bm-duration) var(--zr-bm-ease),
+    margin-inline-end var(--zr-bm-duration) var(--zr-bm-ease),
+    scale var(--zr-bm-duration) var(--zr-bm-ease),
+    translate var(--zr-bm-duration) var(--zr-bm-ease),
+    background-color 180ms ease,
+    box-shadow 180ms ease !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] {
+  margin-inline-start: calc(var(--zr-bm-margin-start, 0px) + var(--zr-bm-grow, 0px)) !important;
+  margin-inline-end: calc(var(--zr-bm-margin-end, 0px) + var(--zr-bm-grow, 0px)) !important;
+  scale: var(--zr-bm-scale-x, 1.42) var(--zr-bm-scale-y, 1.36) !important;
+  translate: 0 calc(-1 * var(--zr-bm-lift, 6px)) !important;
+  background-color: color-mix(in srgb, currentColor 16%, transparent) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .20) !important;
+  border-radius: 7px !important;
+  z-index: 3;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] :is(.toolbarbutton-icon, .toolbarbutton-text) {
+  scale: 1 1 !important;
+  transform-origin: center;
+  transition: scale var(--zr-bm-duration) var(--zr-bm-ease) !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] :is(.toolbarbutton-icon, .toolbarbutton-text) {
+  scale: var(--zr-bm-inner-x, .83) var(--zr-bm-inner-y, .87) !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator {
+  display: block !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 8 !important;
+  pointer-events: none !important;
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--toolbar-color, #dce6ff) 75%, #a9c1ff),
+    color-mix(in srgb, var(--toolbar-color, #dce6ff) 90%, #a9c1ff));
+  box-shadow: 0 0 8px color-mix(in srgb, #99b4ff 52%, transparent);
+  opacity: 0;
+  transition: opacity 150ms ease;
+  will-change: transform, width, height;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator[data-zr-visible] { opacity: 1 !important; }
+#PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator[data-zr-no-glow] { box-shadow: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed],
+  #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] :is(.toolbarbutton-icon, .toolbarbutton-text),
+  #PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator {
+    transition: none !important;
+  }
+}
