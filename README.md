@@ -18,13 +18,13 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle
 
 ## Adaptive Page Transitions (experimental)
 
-An optional, navigation-aware reveal for regular HTTP(S) pages. A clicked link or bookmark is the origin of an expanding card when available. The outgoing page is captured in memory if Firefox permits it; the new page is revealed at its normal viewport size through a growing aperture. Navigation itself is not intercepted or delayed.
+An optional navigation-aware liquid reveal for regular HTTP(S) pages. A small glass-like drop flies from the actual pointer location to the center, then opens into the real, unscaled page. A valid pre-navigation capture can preserve the outgoing page; otherwise the effect runs directly over live content. No opaque placeholder or stretched screenshot is shown. Navigation itself is not intercepted or delayed.
 
 - Uses top-level web-progress and first-contentful-paint signals where available.
-- Same-document navigation uses a bounded DOM-settling heuristic; it is not an exact measurement of SPA readiness.
-- Finishes immediately for very fast loads or with a short final reveal when content is ready; a strict 4-second default cap removes the overlay even if loading continues.
+- YouTube uses its navigation-finish event when available; other same-document navigations use a bounded DOM-settling heuristic. Neither is an exact measurement of SPA readiness.
+- Finishes immediately for extremely fast loads or with a short final liquid reveal when content is ready; a strict 4-second default cap removes the overlay even if loading continues.
 - Cancels on tab selection, resize, Escape, dialogs, disabling or reduced-motion.
-- If the content actor or snapshot is unavailable, uses a centered/themed fallback and native progress events. Some foreground new tabs and in-page interactions are intentionally not animated.
+- If the content actor is unavailable, uses Gecko's native pointer location and native progress events. Invalid or late snapshots are discarded. Some foreground new tabs and in-page interactions are intentionally not animated.
 - Off by default while experimental. Enable **Adaptive Page Transitions** in Sine's mod preferences. No page contents, screenshots or browsing history are stored or transmitted.
 
 Review [transitions.uc.mjs](transitions.uc.mjs) and [actors](actors/) before enabling. Runtime verification in Zen/Sine is pending.
