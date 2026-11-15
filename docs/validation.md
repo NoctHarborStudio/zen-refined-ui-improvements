@@ -66,3 +66,11 @@ No browser integration testing has been performed for this preview.
 - [ ] Slow page: small gray aperture grows until readiness, then full reveal; deadline exit finishes by 4000 ms.
 - [ ] Reddit, GitHub, YouTube home→watch, direct URL: no premature full reveal or old page inside the circle; actual browser testing required.
 - [ ] Intermediate network stops/redirects and background-tab closing must not abruptly remove the effect.
+
+## Preview.6 progressive reveal
+
+- [ ] Fast navigation: 800 ms minimum; circle expands directly after 260 ms flight, content loads live inside; no pixel-probe delay.
+- [ ] Slow navigation: live page is exposed after commitment/paint and can continue updating; smooth monotonic completion or deadline exit.
+- [ ] Small geometry changes re-anchor the overlay instead of cancelling; no abrupt removal at 70%.
+- [ ] Diagnostics lastResult records reason, elapsed, and progress for every exit. Native back/forward and explicit cancellation stay immediate.
+- [ ] Compare live rendering on YouTube, Reddit, GitHub and Steam; actual WebRender behavior still requires browser testing.

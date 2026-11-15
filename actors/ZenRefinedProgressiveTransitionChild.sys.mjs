@@ -1,0 +1,109 @@
+/* Browser-process bridge: exact pointer origin and navigation readiness. */
+export class ZenRefinedProgressiveTransitionChild extends JSWindowActorChild {
+  #paintObserver=null;
+  #paintSent=false;
+  #softCleanup=null;
+  #dead=false;
+  #ytStart=0;
+  #ytFinish=0;
+  #ytUrl="";
+  #ytListeners=null;
+  #lastWarm=-Infinity;
+  actorCreated() {
+    const win=this.contentWindow;
+    if (!win) return;
+    try {
+      this.#paintObserver=new win.PerformanceObserver(entries=>{
+        if(entries.getEntries().some(entry=>entry.name==="first-contentful-paint"))this.#paint();
+      });
+      this.#paintObserver.observe({type:"paint",buffered:true});
+    } catch { this.#paintObserver=null; }
+    if (this.#youtube()) {
+      const start=()=>{ this.#ytStart=win.performance.now(); };
+      const end=()=>{ this.#ytFinish=win.performance.now(); this.#ytUrl=win.location.href; };
+      win.addEventListener("yt-navigate-start",start,true,true);
+      win.addEventListener("yt-navigate-finish",end,true,true);
+      this.#ytListeners=()=>{win.removeEventListener("yt-navigate-start",start,true);win.removeEventListener("yt-navigate-finish",end,true);};
+    }
+  }
+  #youtube() {
+    try { return /(^|\.)youtube\.com$/i.test(this.contentWindow.location.hostname); } catch { return false; }
+  }
+  #send(name,data={}) { if(!this.#dead)try{this.sendAsyncMessage(name,data);}catch{} }
+  #paint(){if(this.#paintSent)return;this.#paintSent=true;this.#send("Paint");}
+  handleEvent(event) {
+    const win=this.contentWindow;
+    if (!win) return;
+    if(event.type==="pointermove" || event.type==="scroll"){
+      const t=win.performance.now();if(t-this.#lastWarm>1000){this.#lastWarm=t;this.#send("Warm");}return;
+    }
+    if(event.type==="popstate"){this.#send("History");return;}
+    if(event.type==="pointerdown" || (event.type==="click" && event.detail===0)){
+      if(!event.isTrusted || event.button!==0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)return;
+      const path=event.composedPath();
+      if(path.some(n=>n?.nodeType===1 && n.matches?.("input, textarea, select, [contenteditable=true]")))return;
+      const link=path.find(n=>n?.nodeType===1 && n.matches?.("a[href], area[href], [role=link], ytd-thumbnail, yt-lockup-view-model"));
+      if(!link)return;
+      if(link?.hasAttribute("download") || (link?.target && !["_self","_top","_parent"].includes(link.target.toLowerCase())))return;
+      let x=event.clientX,y=event.clientY;
+      if(event.type==="click" && event.detail===0 && link){
+        const r=link.getBoundingClientRect();x=r.x+r.width/2;y=r.y+r.height/2;
+      }
+      // A bounded raw snapshot crosses only local privileged actor IPC; it is never persisted.
+      const pixels=null; // parent prewarms snapshots; avoid synchronous content readback on click
+      this.#send("Origin",{x,y,vw:win.innerWidth,vh:win.innerHeight,navigation:true,pixels});
+    }else if(event.type==="pageshow"){
+      if(event.persisted)this.#send("Paint");
+      else if(win.performance.getEntriesByName("first-contentful-paint").length)this.#paint();
+    }else if(event.type==="DOMContentLoaded"&&!this.#paintObserver){
+      win.requestAnimationFrame(()=>win.requestAnimationFrame(()=>this.#paint()));
+    }
+  }
+  receiveMessage(message){
+    if(message.name==="CancelSoft"){this.#softCleanup?.();return;}
+    if(message.name!=="WatchSoft")return;
+    this.#softCleanup?.();
+    const win=this.contentWindow,doc=this.document;
+    if(!win||!doc?.documentElement)return;
+    const token=message.data.token, start=win.performance.now(), youtube=this.#youtube();
+    let timer=0,hard=0,raf=0,paintRaf=0,observer,done=false,ytEnd=null,paintSent=false;
+    const cleanup=()=>{
+      if(done)return;done=true;
+      win.clearTimeout(timer);win.clearTimeout(hard);win.cancelAnimationFrame(raf);win.cancelAnimationFrame(paintRaf);observer?.disconnect();
+      if(ytEnd)win.removeEventListener("yt-navigate-finish",ytEnd,true);
+      if(this.#softCleanup===cleanup)this.#softCleanup=null;
+    };
+    const paint=()=>{if(paintSent||done)return;paintSent=true;this.#send("SoftPaint",{token});};
+    const firstUpdate=()=>{if(paintSent||done||paintRaf)return;paintRaf=win.requestAnimationFrame(()=>{paintRaf=win.requestAnimationFrame(paint);});};
+    const finish=()=>{if(done)return;paint();cleanup();this.#send("SoftReady",{token});};
+    const afterPaint=()=>{
+      win.cancelAnimationFrame(raf);
+      raf=win.requestAnimationFrame(()=>{raf=win.requestAnimationFrame(finish);});
+    };
+    this.#softCleanup=cleanup;
+    try {
+      if(youtube){
+        ytEnd=()=>{firstUpdate();afterPaint();};
+        win.addEventListener("yt-navigate-finish",ytEnd,true,true);
+        if(this.#ytFinish>=this.#ytStart && this.#ytUrl===win.location.href && start-this.#ytFinish<800)afterPaint();
+        // Proprietary event can change; do not wait indefinitely.
+        observer=new win.MutationObserver(firstUpdate);
+        observer.observe(doc.documentElement,{childList:true,subtree:true,characterData:true});
+        hard=win.setTimeout(()=>{firstUpdate();cleanup();},3500);
+      }else{
+        const settle=()=>{
+          firstUpdate();
+          win.clearTimeout(timer);win.cancelAnimationFrame(raf);
+          timer=win.setTimeout(afterPaint,180);
+        };
+        observer=new win.MutationObserver(settle);
+        observer.observe(doc.documentElement,{childList:true,subtree:true,characterData:true});
+        // Start observing before declaring readiness; if the mutation was
+        // already delivered before WatchSoft, two paints provide a hint.
+        firstUpdate();timer=win.setTimeout(afterPaint,350);
+        hard=win.setTimeout(()=>{firstUpdate();cleanup();},3500);
+      }
+    }catch{cleanup();}
+  }
+  didDestroy(){this.#dead=true;this.#paintObserver?.disconnect();this.#softCleanup?.();this.#ytListeners?.();}
+}

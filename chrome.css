@@ -83,7 +83,7 @@
   }
 }
 
-/* Adaptive Page Transitions v3 — one liquid silhouette and a live circular aperture. */
+/* Adaptive Page Transitions — single cover clip, live destination. */
 .zr-page-transition {
   position: fixed !important;
   z-index: 2147483000 !important;
@@ -100,6 +100,16 @@
   pointer-events: none !important;
   margin: 0 !important;
   padding: 0 !important;
+}
+.zr-page-transition-cover {
+  overflow: hidden !important;
+}
+.zr-page-transition-cover > * {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
 }
 .zr-page-transition-backdrop { background: transparent !important; }
 .zr-page-transition-shade { background: black; opacity: 0; }

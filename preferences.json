@@ -108,11 +108,15 @@
   {
     "type": "dropdown",
     "property": "zen.refined.transitions.timeout",
-    "label": "Maximum transition duration (minimum 1000 ms)",
+    "label": "Maximum transition duration (minimum 800 ms)",
     "value": "number",
     "defaultValue": 4000,
     "placeholder": false,
     "options": [
+      {
+        "label": "800 ms",
+        "value": 800
+      },
       {
         "label": "1000 ms",
         "value": 1000

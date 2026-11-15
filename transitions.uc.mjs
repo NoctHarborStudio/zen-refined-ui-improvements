@@ -6,8 +6,8 @@ const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
 const SVG = "http://www.w3.org/2000/svg";
-const ACTOR = "ZenRefinedVerifiedTransition";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedVerifiedTransitionParent.sys.mjs";
+const ACTOR = "ZenRefinedProgressiveTransition";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedProgressiveTransitionParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -25,14 +25,14 @@ function install() {
   let active = null, origin = null, originTimer = 0, serial = 0, dead = false;
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
-  let recentPointer = null, pending = null, pendingTimer = 0;
-  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.5]', ...args);
+  let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
+  const log = (...args) => console.info('[Zen Refined transitions 0.2.0-preview.6]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
   const debug = (...args) => { if (prefs.getBoolPref(PREFIX + "debug", false)) console.debug("[Zen Refined transitions]", ...args); };
   const on = (key, fallback = true) => prefs.getBoolPref(PREFIX + key, fallback);
-  const maxTime = () => clamp(prefs.getIntPref(PREFIX + "timeout", 4000), 1000, 4000);
+  const maxTime = () => clamp(prefs.getIntPref(PREFIX + "timeout", 4000), 800, 4000);
   const now = () => window.performance.now();
   function safeBrowser(b) {
     return enabled && !motion.matches && b === gb.selectedBrowser &&
@@ -54,8 +54,9 @@ function install() {
     warmTimer=window.setTimeout(()=>warm(gb.selectedBrowser,true),delay);
   }
   function warm(b, force=false) {
-    if(!safeBrowser(b)||!on("snapshot")||active||pending||warming||!isWeb(b.currentURI?.spec))return;
-    if(now()-lastWarm<(force?350:1000))return;
+    if(!safeBrowser(b)||!on("snapshot")||active||pending||!isWeb(b.currentURI?.spec))return;
+    const delay=(force?350:1000)-(now()-lastWarm);
+    if(warming || delay>0){if(force)scheduleWarm(Math.max(120,delay));return;}
     const bounds=b.getBoundingClientRect(), global=b.browsingContext?.currentWindowGlobal, uri=b.currentURI.spec;
     if(!global?.drawSnapshot){debug("warm: drawSnapshot unavailable");return;}
     const scale=clamp(1900/Math.max(bounds.width,bounds.height),.12,1), epoch=cacheEpoch;
@@ -67,9 +68,14 @@ function install() {
           b.browsingContext?.currentWindowGlobal!==global||b.currentURI?.spec!==uri){
           bitmap.close?.();return;
         }
+        // Validate and upload the outgoing frame BEFORE navigation, not in
+        // the first animation frame. Keep the previous good frame if this fails.
+        const frame=drawSource({bitmap},bounds);
+        bitmap.close?.();
+        if(!frame){debug("warm: rejected outgoing frame");return;}
         cached?.bitmap?.close?.();
-        cached={browser:b,uri,global,bitmap,at:now()};
-        debug("warm: cached outgoing viewport",bitmap.width,bitmap.height);
+        cached={browser:b,uri,global,frame,at:now()};
+        debug("warm: cached outgoing viewport",frame.width,frame.height);
       },error=>debug("warm: drawSnapshot rejected",String(error))).finally(()=>{
         warming=false;
         if(cacheEpoch!==epoch)scheduleWarm();
@@ -95,33 +101,6 @@ function install() {
     originTimer = 0;
     if (origin) { origin.expired = true; origin.bitmap?.close?.(); origin.bitmap = null; origin.pixels=null; }
     origin = null;
-  }
-  function fingerprint(image,width,height){
-    try{
-      const canvas=document.createElementNS(NS,"canvas");canvas.width=32;canvas.height=18;
-      const c=canvas.getContext("2d",{willReadFrequently:true});
-      c.drawImage(image,0,0,width,height,0,0,32,18);
-      const data=c.getImageData(0,0,32,18).data;
-      let count=0,detail=0,centerLight=0,centerCount=0;
-      const rgb=new Uint8Array(32*18*3);
-      for(let y=0;y<18;y++)for(let x=0;x<32;x++){
-        const i=y*32+x,j=i*4,k=i*3;
-        if(data[j+3]>=220)count++;
-        rgb[k]=data[j];rgb[k+1]=data[j+1];rgb[k+2]=data[j+2];
-        if(x>0){const p=k-3;if(Math.abs(rgb[k]-rgb[p])+Math.abs(rgb[k+1]-rgb[p+1])+Math.abs(rgb[k+2]-rgb[p+2])>45)detail++;}
-        if(x>=3&&x<=20&&y>=3&&y<=13){centerCount++;if(Math.max(rgb[k],rgb[k+1],rgb[k+2])>25)centerLight++;}
-      }
-      return {rgb,opaque:count/576,detail:detail/576,center: centerLight/centerCount};
-    }catch{return null;}
-  }
-  function difference(a,b){
-    if(!a||!b)return 0;
-    let sum=0,changed=0;
-    for(let i=0;i<a.rgb.length;i+=3){
-      const delta=(Math.abs(a.rgb[i]-b.rgb[i])+Math.abs(a.rgb[i+1]-b.rgb[i+1])+Math.abs(a.rgb[i+2]-b.rgb[i+2]))/3;
-      sum+=delta;if(delta>18)changed++;
-    }
-    return {mean:sum/576,changed:changed/576};
   }
   function validPixels(ctx, width, height) {
     try {
@@ -163,7 +142,7 @@ function install() {
     if(active)finish(active,"interaction");
     clearOrigin();
     origin={browser:b,rect,at:now(),bitmap:null,pixels,expired:false};
-    if(!pixels && cached?.browser!==b)capture(b,origin);
+    if(!pixels && (cached?.browser!==b||cached.uri!==b.currentURI?.spec))capture(b,origin);
     debug('origin',pixels?'local snapshot':'cached/async snapshot');
     originTimer=window.setTimeout(clearOrigin,1400);
   }
@@ -211,13 +190,12 @@ function install() {
     if(!source && oldCache)source={browser:b,rect:pointer(b),bitmap:null,pixels:null};
     if(!source){debug("skip: no origin or cached frame");return null;}
     window.clearTimeout(originTimer);originTimer=0;origin=null;
-    let backdrop=drawSource(source,bounds);
-    if(!backdrop && oldCache)backdrop=drawSource({bitmap:oldCache.bitmap},bounds);
+    let backdrop=oldCache?.frame||drawSource(source,bounds);
     source.expired=true;source.bitmap?.close?.();source.bitmap=null;source.pixels=null;
     if(!backdrop){debug("skip: no valid outgoing snapshot");return null;}
     clearPending();
     clearCache();
-    const overlay=newNode("div","zr-page-transition"),shade=newNode("div","zr-page-transition-shade");
+    const overlay=newNode("div","zr-page-transition"),cover=newNode("div","zr-page-transition-cover"),shade=newNode("div","zr-page-transition-shade");
     const art=svg("svg",{class:"zr-page-transition-art",viewBox:"0 0 "+bounds.width+" "+bounds.height});
     const defs=svg("defs"),gradient=svg("linearGradient",{id:"zr-morph-drop-fill",x1:"0",y1:"0",x2:"0",y2:"1"});
     const light=svg("stop",{offset:"0%","stop-color":"#dedede"}),dark=svg("stop",{offset:"100%","stop-color":"#a8a8a8"});
@@ -225,27 +203,34 @@ function install() {
     const ring=svg("circle",{cx:bounds.width/2,cy:bounds.height/2,r:23,fill:"none",stroke:"#888","stroke-width":"1.5",opacity:"0"});
     const fill=svg("circle",{cx:bounds.width/2,cy:bounds.height/2,r:23,fill:"#737373",opacity:"0"});
     const drop=svg("path",{fill:"url(#zr-morph-drop-fill)",stroke:"#969696","stroke-width":"1.25"});
-    art.append(defs,fill,ring,drop);overlay.append(backdrop,shade,art);
+    art.append(defs,fill,ring,drop);cover.append(backdrop,shade);overlay.append(cover,art);
     Object.assign(overlay.style,{left:bounds.left+"px",top:bounds.top+"px",width:bounds.width+"px",height:bounds.height+"px"});
-    const start=now(),nominal=1000;
+    const start=now(),nominal=800;
     const s={token:++serial,browser:b,kind,uri,start,timeout:maxTime(),nominal,
-      w:bounds.width,h:bounds.height,left:bounds.left,top:bounds.top,overlay,backdrop,shade,art,drop,ring,fill,light,dark,
+      w:bounds.width,h:bounds.height,left:bounds.left,top:bounds.top,overlay,cover,backdrop,shade,art,drop,ring,fill,light,dark,
       from:point(bounds,source.rect),committed:kind==="soft",global:kind==="soft"?b.browsingContext?.currentWindowGlobal:null,
       oldGlobal:oldCache?.global||b.browsingContext?.currentWindowGlobal,readyAt:null,raf:0,timer:0,lastGeometry:start,
-      oldFingerprint:fingerprint(backdrop,backdrop.width,backdrop.height), signal:false, probing:false, nextProbe:start+120, confirmed:0,
-      revealStart:null,revealDuration:0,revealRadius:23,forced:false,flightMs:320,dim:on("dim"),youtube:/^https?:\/\/(?:[^/]+\.)?youtube\.com\//i.test(uri)};
+      commitAt:kind==="soft"?start:null,paintAt:null,showAt:null,plan:null,progress:0,lastProgressAt:start,
+      velocity:0,radius:0,finalRendered:false,flightMs:260,dim:on("dim"),
+      clipPath:window.CSS?.supports?.("clip-path",'path(evenodd, "M 0 0 H 100 V 100 H 0 Z M 50 50 L 51 51 Z")')||false,youtube:/^https?:\/\/(?:[^/]+\.)?youtube\.com\//i.test(uri)};
     active=s;
     try {
       root.append(overlay);
-      if(s.dim)backdrop.style.filter="brightness(.94)";
+      if(s.dim)shade.style.opacity=".06";
       render(s,start);
-      s.timer=window.setTimeout(()=>finish(s,"timeout"),s.timeout);
+      // One watchdog for a suspended refresh driver. Normal completion is
+      // exclusively owned by the animation clock, not this timer.
+      s.timer=window.setTimeout(()=>{
+        if(active!==s)return;
+        s.progress=1;s.showAt=s.showAt??now();render(s,s.start+s.timeout);
+        finish(s,"deadline-watchdog");
+      },s.timeout);
       s.raf=window.requestAnimationFrame(t=>tick(s,t));
       debug("start",kind,"validated snapshot");
       if(kind==="soft"){
         const actor=getActor(b);
         try{actor?.sendAsyncMessage("WatchSoft",{token:s.token});}catch{}
-        // The actor provides a hint, never a timer-based declaration of readiness.
+        // SoftPaint exposes the first meaningful update; SoftReady only affects completion.
       }
       return s;
     }catch(error){finish(s,"setup-error");console.warn("[Zen Refined transitions]",error);return null;}
@@ -256,9 +241,16 @@ function install() {
       " C "+(r*k)+" "+(-h)+" "+r+" "+(-h*k)+" "+r+" 0 C "+r+" "+(h*k)+" "+(r*k)+" "+h+" 0 "+h+
       " C "+(-r*k)+" "+h+" "+(-tail)+" "+(h*k*(1-stretch*.7))+" "+(-tail)+" 0 Z";
   }
-  function waitingRadius(elapsed){
-    // Continuous small expansion during slow loading, not a giant empty hole.
-    return 23+26*(1-Math.exp(-Math.max(0,elapsed)/950));
+  function setCover(s,radius){
+    const cx=s.w/2,cy=s.h/2,r=Math.max(0,radius);
+    if(s.clipPath){
+      // A single inverse circular clip, shared by the snapshot and dim layer.
+      const path="M 0 0 H "+s.w+" V "+s.h+" H 0 Z M "+(cx-r)+" "+cy+
+        " A "+r+" "+r+" 0 1 0 "+(cx+r)+" "+cy+" A "+r+" "+r+" 0 1 0 "+(cx-r)+" "+cy+" Z";
+      s.cover.style.clipPath='path(evenodd, "'+path+'")';
+    }else{
+      s.cover.style.maskImage="radial-gradient(circle at 50% 50%, transparent "+Math.max(0,r-.6)+"px, black "+(r+.6)+"px)";
+    }
   }
   function render(s,time){
     const elapsed=Math.max(0,time-s.start),flight=clamp(elapsed/s.flightMs,0,1);
@@ -277,90 +269,113 @@ function install() {
       return;
     }
     s.drop.setAttribute("opacity","0");
-    const t=s.revealStart===null?0:clamp((time-s.revealStart)/s.revealDuration,0,1);
-    const radius=s.revealStart===null?waitingRadius(elapsed-s.flightMs):
-      lerp(s.revealRadius,Math.hypot(cx,cy)+8,1-Math.pow(1-t,3)*(1+3*t));
-    // Only expose the live destination once verified (or during the bounded
-    // timeout exit). Before that the old frame remains completely opaque.
-    if(s.revealStart!==null){
-      s.backdrop.style.maskImage="radial-gradient(circle at 50% 50%, transparent "+Math.max(0,radius-.8)+"px, black "+(radius+.8)+"px)";
-      if(t>.82&&s.dim)s.backdrop.style.filter="brightness("+lerp(.94,1,ease((t-.82)/.18))+")";
-    }
+    const p=clamp(s.progress,0,1);
+    const radius=lerp(23,Math.hypot(cx,cy)+12,ease(p));
+    s.radius=radius;
+    const visibility=s.showAt===null?0:ease((time-s.showAt)/100);
+    // The new page is live behind this cutout: subsequent DOM, image and
+    // video updates are immediately visible inside it. No destination copy.
+    if(s.showAt!==null)setCover(s,radius);
     s.fill.setAttribute("r",String(radius));
-    s.fill.setAttribute("opacity",String(s.revealStart===null?1:1-ease(t/.15)));
+    s.fill.setAttribute("opacity",String(1-visibility));
     s.ring.setAttribute("r",String(radius));
-    s.ring.setAttribute("opacity",String(1-ease((t-.86)/.14)));
+    s.ring.setAttribute("opacity",String(1-ease((p-.86)/.14)));
+    if(s.dim)s.shade.style.opacity=String(.06*(1-ease((p-.8)/.2)));
+    if(p>=1){
+      s.cover.style.opacity="0";s.fill.setAttribute("opacity","0");s.ring.setAttribute("opacity","0");
+    }
   }
-  function beginReveal(s,time,forced=false){
-    if(s.revealStart!==null)return;
+  function planCompletion(s,time,forced=false){
+    if(s.plan)return;
     const elapsed=time-s.start;
-    s.revealStart=time;s.forced=forced;s.revealRadius=waitingRadius(elapsed-s.flightMs);
-    s.revealDuration=Math.max(1,Math.min(s.timeout-elapsed,Math.max(540,1000-elapsed)));
-    debug("reveal",forced?"deadline fallback":"verified destination",Math.round(elapsed)+"ms");
+    // Reserve a compositor frame at the deadline; 800ms is the minimum,
+    // not a prediction of network duration.
+    const earliest=Math.max(s.start+s.nominal,time+(forced?0:Math.max(180,440*(1-s.progress))));
+    const deadline=s.start+s.timeout-20;
+    const end=Math.max(time+1,Math.min(deadline,earliest));
+    const duration=end-time;
+    // Cubic Hermite continuity: carry the current expansion velocity into
+    // the completion curve, bounded for strictly monotonic motion.
+    const tangent=clamp(s.velocity*duration,0,3*(1-s.progress));
+    s.plan={at:time,end,from:s.progress,tangent};
+    if(s.showAt===null)s.showAt=time;
+    debug("completion planned",forced?"deadline":"ready",Math.round(elapsed)+"ms","end",Math.round(end-s.start)+"ms");
   }
-  function probe(s,time){
-    if(active!==s||s.readyAt!==null||s.probing||!s.committed||time<s.nextProbe)return;
-    const b=s.browser,global=b.browsingContext?.currentWindowGlobal,uri=b.currentURI?.spec;
-    if(!global?.drawSnapshot||!isWeb(uri)||stripHash(uri)!==stripHash(s.uri))return;
-    if(s.kind==="hard"&&global===s.oldGlobal&&s.oldGlobal)return;
-    // A cheap low-resolution probe. Two changed, non-blank observations
-    // avoid accepting an old document, a transient paint or a black player.
-    s.probing=true;s.nextProbe=time+170;
-    const scale=clamp(420/Math.max(s.w,s.h),.08,.5);
-    try{
-      global.drawSnapshot(null,scale,"transparent",{drawView:true}).then(bitmap=>{
-        if(!bitmap)return;
-        try{
-          if(active!==s||global!==b.browsingContext?.currentWindowGlobal||uri!==b.currentURI?.spec)return;
-          const fp=fingerprint(bitmap,bitmap.width,bitmap.height);
-          const diff=difference(s.oldFingerprint,fp);
-          const watch=s.youtube&&/\/watch(?:\?|$)/.test(uri);
-          const valid=fp&&fp.opaque>.97&&fp.detail>.025&&diff&&diff.mean>5&&diff.changed>.09&&(!watch||fp.center>.12);
-          if(valid){
-            s.confirmed++;
-            // An actor/network hint plus one actual changed frame is not
-            // sufficient: always require two visual samples.
-            if(s.confirmed>=2){
-              s.readyAt=now();debug("destination verified",Math.round(s.readyAt-s.start)+"ms",Math.round(diff.changed*100)+"% changed");
-            }
-          }else{s.confirmed=0;debug("destination not ready",diff?Math.round(diff.changed*100)+"% changed":"no pixels");}
-        }finally{bitmap.close?.();}
-      },error=>debug("destination probe failed",String(error))).finally(()=>{s.probing=false;});
-    }catch{s.probing=false;}
+  function syncGeometry(s){
+    const b=s.browser,r=b.getBoundingClientRect();
+    if(r.width<=20||r.height<=20)return false;
+    if(Math.abs(r.width-s.w)<.5&&Math.abs(r.height-s.h)<.5&&Math.abs(r.left-s.left)<.5&&Math.abs(r.top-s.top)<.5)return true;
+    // Compact mode / sidebar layout may move by a few pixels. Re-anchor
+    // instead of deleting an in-progress mask and flashing the full page.
+    s.from={x:clamp(s.from.x+r.left-s.left,0,r.width),y:clamp(s.from.y+r.top-s.top,0,r.height)};
+    s.w=r.width;s.h=r.height;s.left=r.left;s.top=r.top;
+    Object.assign(s.overlay.style,{left:r.left+"px",top:r.top+"px",width:r.width+"px",height:r.height+"px"});
+    s.art.setAttribute("viewBox","0 0 "+s.w+" "+s.h);
+    for(const el of [s.fill,s.ring]){el.setAttribute("cx",String(s.w/2));el.setAttribute("cy",String(s.h/2));}
+    return true;
   }
   function tick(s,time){
     if(active!==s)return;
     if(!enabled||motion.matches||s.browser!==gb.selectedBrowser)return finish(s,"context");
-    if(time-s.lastGeometry>200){
-      s.lastGeometry=time;
-      if(!safeBrowser(s.browser))return finish(s,"context");
-      const r=s.browser.getBoundingClientRect();
-      if(Math.abs(r.width-s.w)>6||Math.abs(r.height-s.h)>6||Math.abs(r.left-s.left)>6||Math.abs(r.top-s.top)>6)
-        return finish(s,"resize");
-    }
+    if(time-s.lastGeometry>160){s.lastGeometry=time;if(!safeBrowser(s.browser)||!syncGeometry(s))return finish(s,"context");}
     const elapsed=Math.max(0,time-s.start);
-    if(elapsed>=s.timeout)return finish(s,"timeout");
-    if(s.revealStart===null){
-      probe(s,time);
-      if(elapsed>=s.flightMs&&(s.readyAt!==null||elapsed>=s.timeout-560))
-        beginReveal(s,time,s.readyAt===null);
+    if(s.finalRendered&&elapsed>=s.nominal)return finish(s,"complete");
+    // Readiness is a hint to the animation, never a gate to the network.
+    // Hard navigation exposes committed live content after paint or a short
+    // grace period; SPA navigation uses its first DOM update, with a bounded
+    // fallback because not every application exposes navigation events.
+    if(s.showAt===null&&elapsed>=s.flightMs&&s.committed){
+      const grace=s.kind==="soft"?240:90;
+      if(s.paintAt!==null||time-(s.commitAt??s.start)>=grace)s.showAt=time;
+    }
+    if(elapsed>=s.flightMs){
+      const age=elapsed-s.flightMs;
+      // Begin expanding on landing, regardless of readiness. Without a
+      // committed page only a small neutral disc grows; once visible, the
+      // aperture grows continuously and the user sees native loading.
+      const limit=s.showAt===null?.19:.80;
+      const tau=s.showAt===null?400:740;
+      const dt=Math.max(0,time-Math.max(s.lastProgressAt,s.start+s.flightMs));
+      if(!s.plan){
+        const previous=s.progress;
+        if(s.progress<limit)s.progress=limit-(limit-s.progress)*Math.exp(-dt/tau);
+        s.velocity=dt>0?(s.progress-previous)/dt:s.velocity;
+        const forced=elapsed>=s.timeout-600;
+        if(s.readyAt!==null||forced)planCompletion(s,time,forced);
+      }
+      if(s.plan){
+        const a=s.plan,u=clamp((time-a.at)/(a.end-a.at),0,1);
+        const u2=u*u,u3=u2*u;
+        const value=(2*u3-3*u2+1)*a.from+(u3-2*u2+u)*a.tangent+(-2*u3+3*u2);
+        s.progress=Math.max(s.progress,clamp(value,0,1));
+        if(u>=1&&elapsed>=s.nominal)s.progress=1;
+        // At a custom 800ms deadline the interpolation may finish just
+        // before the minimum; keep the final frame until 800ms.
+        if(u>=1&&elapsed<s.nominal)s.progress=Math.min(s.progress,.999);
+      }
+      s.lastProgressAt=time;
     }
     render(s,time);
-    if(s.revealStart!==null&&time-s.revealStart>=s.revealDuration&&elapsed>=1000)
-      return finish(s,"complete");
+    if(s.progress>=1&&elapsed>=s.nominal)s.finalRendered=true;
+    if(elapsed>=s.timeout)return finish(s,"deadline-frame");
     s.raf=window.requestAnimationFrame(t=>tick(s,t));
+  }
+  function markPaint(s){
+    if(active!==s)return;
+    if(s.paintAt===null)s.paintAt=now();
+    debug("destination first update",Math.round(now()-s.start)+"ms");
   }
   function markReady(s){
     if(active!==s)return;
-    s.signal=true;
-    s.nextProbe=Math.min(s.nextProbe,now());
-    debug("navigation readiness hint",Math.round(now()-s.start)+"ms");
+    markPaint(s);
+    if(s.readyAt===null){s.readyAt=now();debug("destination readiness",Math.round(s.readyAt-s.start)+"ms");}
   }
   function finish(s,reason){
     if(active!==s)return;
     active=null;window.cancelAnimationFrame(s.raf);window.clearTimeout(s.timer);window.clearTimeout(s.softTimer);
     if(s.kind==="soft"){try{getActor(s.browser)?.sendAsyncMessage("CancelSoft");}catch{}}
-    s.overlay.remove();debug("finish",reason,Math.round(now()-s.start)+"ms");scheduleWarm(350);
+    lastResult={reason,elapsed:Math.round(now()-s.start),progress:Math.round(s.progress*1000)/1000,committed:s.committed,painted:s.paintAt!==null};
+    s.overlay.remove();debug("finish",lastResult);scheduleWarm(350);
   }
   function cancel(){
     if(active)finish(active,"cancel");clearOrigin();clearPending();
@@ -386,16 +401,17 @@ function install() {
       if(pending?.browser===b && now()-pending.at<180 && !active){
         const p=pending;
         const st=begin(b,p.kind,p.uri);
-        if(st&&p.committed){st.committed=true;st.global=b.browsingContext?.currentWindowGlobal;}
+        if(st&&p.committed){st.committed=true;st.commitAt=now();st.global=b.browsingContext?.currentWindowGlobal;}
       }
       return;
     }
     if (message.name === "Paint") painted.add(global);
     const s = active;
     if (!s || s.browser !== b || !s.committed) return;
+    if(message.name==="SoftPaint"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global)markPaint(s);
     if (message.name === "SoftReady" && s.kind === "soft" && message.data.token === s.token && global === s.global) markReady(s);
     if (message.name === "Paint" && s.kind === "hard" && global === b.browsingContext?.currentWindowGlobal &&
-        global !== s.oldGlobal) markReady(s);
+        global !== s.oldGlobal) markPaint(s);
   }
   function requestURL(request, b) {
     try { return request.QueryInterface(Ci.nsIChannel).URI.spec; } catch { return b.currentURI?.spec; }
@@ -429,7 +445,7 @@ function install() {
       if (same) {
         if (previous && stripHash(previous) === stripHash(uri)) return;
         if(active?.browser===b){
-          if(active.uri!==uri){active.uri=uri;active.confirmed=0;active.readyAt=null;active.nextProbe=now();}
+          if(active.uri!==uri)active.uri=uri;
           return;
         }
         if(on("soft")){
@@ -441,16 +457,16 @@ function install() {
         }
       } else if (active?.browser === b && active.kind === "hard") {
         active.committed = true;
+        active.commitAt=active.commitAt??now();
         active.global = b.browsingContext?.currentWindowGlobal;
-        if(active.uri!==uri){active.confirmed=0;active.readyAt=null;active.nextProbe=now();}
         active.uri = uri;
-        if (active.global && active.global !== active.oldGlobal && painted.has(active.global)) markReady(active);
+        if (active.global && active.global !== active.oldGlobal && painted.has(active.global)) markPaint(active);
       } else if (origin?.browser === b || (cached?.browser===b&&cached.uri===previous)) {
         pending={browser:b,kind:"hard",uri,previous,at:now(),committed:true};
         const s = begin(b, "hard", uri);
         if (s) {
-          s.committed = true; s.global = b.browsingContext?.currentWindowGlobal;
-          if (s.global && painted.has(s.global)) markReady(s);
+          s.committed = true; s.commitAt=now();s.global = b.browsingContext?.currentWindowGlobal;
+          if (s.global && painted.has(s.global)) markPaint(s);
         }else{window.clearTimeout(pendingTimer);pendingTimer=window.setTimeout(clearPending,180);}
       }
       if(!active)scheduleWarm(350);
@@ -513,7 +529,7 @@ function install() {
   }
   const tabEvents = ["TabSelect"];
   const windowEvents = [["pointerdown", chromePointer, true], ["pointermove",move,true], ["keydown", key, true], ["command",command,true],
-    ["resize", cancel, false], ["deactivate", cancel, false], ["beforecustomization", cancel, false],
+    ["beforecustomization", cancel, false],
     ["fullscreen", cancel, false]];
   function destroy() {
     if (dead) return;
@@ -529,7 +545,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.2.0-preview.5",destinationVerified:active?.readyAt!==null&&!!active,revealing:active?.revealStart!==null&&!!active});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.2.0-preview.6",destinationReady:active?.readyAt!=null,revealing:active?.showAt!=null,progress:active?.progress??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
