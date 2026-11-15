@@ -1,0 +1,30 @@
+/* Adaptive Page Transitions — live browser is never clipped or restyled. */
+.zr-live-reveal {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+  isolation: isolate;
+  contain: strict;
+}
+.zr-live-reveal > *, .zr-live-reveal-cover > * {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+}
+.zr-live-reveal-cover { background: #171717; mask-mode: alpha; }
+.zr-page-transition-backdrop { background: #171717 !important; }
+.zr-live-reveal-shade { background: black; opacity: 0; }
+.zr-live-reveal-shield {
+  background: #171717 !important;
+  clip-path: circle(0px at 50% 50%);
+  opacity: 1;
+}
+.zr-live-reveal-art { overflow: hidden !important; }
+@media (prefers-reduced-motion: reduce) {
+  .zr-live-reveal { display: none !important; }
+}

@@ -16,18 +16,6 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle
 - Native bookmark items, click actions and folder menus are retained.
 - Reduced-motion support and individual controls in Sine.
 
-## Adaptive Page Transitions (experimental)
-
-An optional navigation-aware liquid reveal for regular HTTP(S) pages. A neutral light-gray drop starts at the real click, grows and stretches in flight, turns gray at the center, and immediately becomes an expanding circle revealing the unscaled live destination. The old page remains visible outside the circle.
-
-- A verified transition lasts 800–4000 ms (configurable maximum). The 260 ms drop flight begins with native navigation. While no new frame is confirmed, only a small dark aperture grows; after confirmation the live page expands smoothly. If evidence is unavailable, the overlay fades back to native navigation instead of exposing a stale frame.
-- Prepares a single outgoing viewport snapshot after navigation settles and refreshes it on pointer movement or scrolling; validation occurs before navigation; browser chrome inputs can also use a pre-command snapshot. No synchronous content readback on click. All snapshots are transient local memory. If no valid old frame exists, skip the transition rather than animate over the destination.
-- The live browser remains untouched. Same-document transitions progressively uncover newly rendered text, images and replaced content regions inside the circular aperture. Old visible media is protected even when paused. DOM changes are paired with Gecko paint notifications or refresh-frame fallback; local pixel evidence is only a regional fallback when source geometry is known. The whole shield is released only on evidence of main-content replacement or native completion. Ordinary document loads track the current WindowGlobal identity independently of URL-event ordering, listen for Gecko's MozFirstContentfulPaint and request early visible-content checks from the new document. A nonblank destination snapshot is a fallback, without comparing against the old page. Network progress is diagnostic, never a full-load gate. This remains experimental on arbitrary SPAs.
-- Back/forward, history traversal, no explicit navigation origin, tab changes, dialogs and reduced motion use native behavior or cancel the animation.
-- Off by default while experimental. Enable **Adaptive Page Transitions** in Sine preferences. Capturing is required for the effect. No screenshot is written to disk or transmitted externally.
-
-Review [transitions.uc.mjs](transitions.uc.mjs) and [actors](actors/) before enabling. Runtime verification in Zen/Sine is pending.
-
 ## Install the preview in Sine
 
 In **Settings → Sine Mods**, install the GitHub source:
@@ -36,13 +24,13 @@ In **Settings → Sine Mods**, install the GitHub source:
 NoctHarborStudio/zen-refined-ui-improvements/tree/preview
 ```
 
-Enable the mod, then restart Zen if the script has not loaded. Magnetic Bookmarks is enabled by default; Adaptive Page Transitions is opt-in. Use a test profile first.
+Enable the mod, then restart Zen if the script has not loaded. Magnetic Bookmarks is enabled by default. Use a test profile first.
 
 Sine requires explicit permission to run JavaScript from unpublished GitHub mods. Review [bookmarks.uc.mjs](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/bookmarks.uc.mjs) before granting that permission. This is a global Sine setting; Zen Refined never changes it. No manual Zen or Nebula preference edits are needed.
 
 ## Configuration
 
-All settings are available in the mod's Sine preferences. Disable Magnetic Bookmarks to restore the native bookmarks appearance. Disable Adaptive Page Transitions to restore ordinary page navigation. Disable or remove Zen Refined to unload both modules.
+All settings are available in the mod's Sine preferences. Disable Magnetic Bookmarks to restore the native bookmarks appearance. Disable or remove Zen Refined to unload the bookmark module.
 
 ## Compatibility
 
@@ -54,4 +42,6 @@ See the [validation checklist](https://github.com/NoctHarborStudio/zen-refined-u
 
 [MIT](LICENSE). Independent community project, not affiliated with Zen Browser.
 
-Diagnostics: enable debug logging in Sine, or use `window.__zenRefinedPageTransitions?.diagnostics()` in the browser toolbox console. Startup settings are always reported to the Browser Console.
+## Legacy
+
+Adaptive Page Transitions was retired due to unreliable rendering across websites. Its earlier experimental implementation is archived in [legacy/adaptive-page-transitions](legacy/adaptive-page-transitions/README.md) and is not loaded by Zen Refined.
