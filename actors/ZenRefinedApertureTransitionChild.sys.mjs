@@ -13,6 +13,7 @@ export class ZenRefinedApertureTransitionChild extends JSWindowActorChild {
   #mutationObserver=null;
   #lastMutationUri="";
   #lastInputAt=0;
+  #mutationTimer=0;
   actorCreated() {
     const win=this.contentWindow;
     if (!win) return;
@@ -22,21 +23,6 @@ export class ZenRefinedApertureTransitionChild extends JSWindowActorChild {
       });
       this.#paintObserver.observe({type:"paint",buffered:true});
     } catch { this.#paintObserver=null; }
-    // Track actual content changes, including changes delivered before the
-    // parent receives the same-document URL notification. No DOM text leaves
-    // the content process.
-    try{
-      this.#mutationObserver=new win.MutationObserver(records=>{
-        const relevant=records.some(r=>{
-          const n=r.target?.nodeType===1?r.target:r.target?.parentElement;
-          if(!n||n.closest?.("header,nav,[role=navigation],script,style"))return false;
-          if(r.type==="characterData")return !!n.closest?.("main,article,[role=main],#content,ytd-watch-flexy");
-          return r.type==="childList"&&(r.addedNodes.length||r.removedNodes.length);
-        });
-        if(relevant){this.#lastContentMutation=win.performance.now();this.#lastMutationUri=win.location.href;}
-      });
-      if(win.document.documentElement)this.#mutationObserver.observe(win.document.documentElement,{childList:true,subtree:true,characterData:true});
-    }catch{}
     if (this.#youtube()) {
       const start=()=>{ this.#ytStart=win.performance.now(); };
       const end=()=>{ this.#ytFinish=win.performance.now(); this.#ytUrl=win.location.href; };
@@ -44,6 +30,28 @@ export class ZenRefinedApertureTransitionChild extends JSWindowActorChild {
       win.addEventListener("yt-navigate-finish",end,true,true);
       this.#ytListeners=()=>{win.removeEventListener("yt-navigate-start",start,true);win.removeEventListener("yt-navigate-finish",end,true);};
     }
+  }
+  #armMutationTracking(win){
+    this.#mutationObserver?.disconnect();
+    win.clearTimeout(this.#mutationTimer);
+    this.#lastContentMutation=0;this.#lastMutationUri="";
+      // Track actual content changes, including changes delivered before the
+      // parent receives the same-document URL notification. No DOM text leaves
+      // the content process.
+      try{
+        this.#mutationObserver=new win.MutationObserver(records=>{
+          const relevant=records.some(r=>{
+            const n=r.target?.nodeType===1?r.target:r.target?.parentElement;
+            if(!n||n.closest?.("header,nav,[role=navigation],script,style"))return false;
+            if(r.type==="characterData")return !!n.closest?.("main,article,[role=main],#content,ytd-watch-flexy");
+            return r.type==="childList"&&(r.addedNodes.length||r.removedNodes.length);
+          });
+          if(relevant){this.#lastContentMutation=win.performance.now();this.#lastMutationUri=win.location.href;}
+        });
+        if(win.document.documentElement)this.#mutationObserver.observe(win.document.documentElement,{childList:true,subtree:true,characterData:true});
+      }catch{}
+  
+    this.#mutationTimer=win.setTimeout(()=>this.#mutationObserver?.disconnect(),1800);
   }
   #youtube() {
     try { return /(^|\.)youtube\.com$/i.test(this.contentWindow.location.hostname); } catch { return false; }
@@ -70,12 +78,15 @@ export class ZenRefinedApertureTransitionChild extends JSWindowActorChild {
       }
       // A bounded raw snapshot crosses only local privileged actor IPC; it is never persisted.
       this.#lastInputAt=win.performance.now();
+      this.#armMutationTracking(win);
       const pixels=null; // parent prewarms snapshots; no synchronous content readback
       this.#send("Origin",{x,y,vw:win.innerWidth,vh:win.innerHeight,navigation:true,pixels});
     }else if(event.type==="pageshow"){
       if(event.persisted)this.#send("Paint");
       else if(win.performance.getEntriesByName("first-contentful-paint").length)this.#paint();
-    }else if(event.type==="DOMContentLoaded"&&!this.#paintObserver){
+    }else if(event.type==="DOMContentLoaded"){
+      // FCP is preferred; DOMContentLoaded plus two refresh frames is a
+      // fallback for pages/engines that omit or delay paint timing entries.
       win.requestAnimationFrame(()=>win.requestAnimationFrame(()=>this.#paint()));
     }
   }
@@ -124,5 +135,5 @@ export class ZenRefinedApertureTransitionChild extends JSWindowActorChild {
       hard=win.setTimeout(clean,3900);
     }catch{clean();}
   }
-  didDestroy(){this.#dead=true;this.#paintObserver?.disconnect();this.#mutationObserver?.disconnect();this.#softCleanup?.();this.#ytListeners?.();}
+  didDestroy(){this.#dead=true;this.#paintObserver?.disconnect();this.#mutationObserver?.disconnect();try{this.contentWindow?.clearTimeout(this.#mutationTimer);}catch{}this.#softCleanup?.();this.#ytListeners?.();}
 }

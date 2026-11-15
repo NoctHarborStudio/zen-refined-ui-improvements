@@ -86,3 +86,9 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] First contentful paint or actual SPA mutation releases only the dark shield, not the animation; new content continues painting inside the circle.
 - [ ] Confirm live remote-browser clipping and layer order in Zen/WebRender on Reddit, GitHub, Steam and YouTube. Generic SPA mutation detection is heuristic.
 - [ ] Back/forward, tab switches and module disable remove all temporary stack/browser attributes, CSS variables and sibling layers. No changes to unrelated browser styles.
+
+### Preview.2
+
+- [ ] Unpainted navigation uses the full slow timeline instead of a premature completion; the animation never waits at a fixed radius.
+- [ ] First paint arriving after the document global changes is accepted if the committed destination matches.
+- [ ] Content mutation tracking before SPA navigation is bounded to 1.8 s after input, not permanently active.

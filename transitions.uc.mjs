@@ -28,7 +28,7 @@ function install() {
   let releaseActor = null, enabled = false;
   let historyUntil = 0, cached = null, warming = false, warmTimer = 0, lastWarm = -Infinity, cacheEpoch = 0;
   let recentPointer = null, pending = null, pendingTimer = 0, lastResult = null;
-  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.1]', ...args);
+  const log = (...args) => console.info('[Zen Refined transitions 0.3.0-preview.2]', ...args);
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
@@ -220,7 +220,7 @@ function install() {
       oldGlobal:oldCache?.global||b.browsingContext?.currentWindowGlobal,
       oldURI,firstPaint:null,visibleAt:null,raf:0,timer:0,lastGeometry:start,
       commitAt:kind==="soft"?start:null,progress:0,flightMs:260,last:start,
-      rate:1,plan:null,finalRendered:false,dim:on("dim"),radius:0,
+      rate:null,finalRendered:false,dim:on("dim"),radius:0,
       originalStackRadius:stack.style.getPropertyValue("--zr-aperture-radius"),
       originalStackPriority:stack.style.getPropertyPriority("--zr-aperture-radius"),
       stackWasStatic:window.getComputedStyle(stack).position==="static",
@@ -330,9 +330,9 @@ function install() {
       const span=s.nominal-s.flightMs;
       const remaining=Math.max(1,s.timeout-elapsed-24);
       const minimum=(1-s.progress)*span/remaining;
-      const target=s.firstPaint!==null?1:Math.max(.20,span/Math.max(span,s.timeout-s.flightMs-24));
+      const target=s.firstPaint!==null?1:span/Math.max(span,s.timeout-s.flightMs-24);
       const desired=Math.max(target,minimum);
-      const decay=Math.exp(-dt/95),oldRate=s.rate;
+      const decay=Math.exp(-dt/95),oldRate=s.rate??desired;
       s.rate=desired+(oldRate-desired)*decay;
       const step=(desired*dt+(oldRate-desired)*95*(1-decay))/span;
       // Enforce the minimum time even if a custom cap requires acceleration.
@@ -395,7 +395,8 @@ function install() {
       if(pending?.browser===b && now()-pending.at<180 && !active){
         const p=pending;
         const st=begin(b,p.kind,p.uri);
-        if(st&&p.committed){st.committed=true;st.commitAt=now();st.global=b.browsingContext?.currentWindowGlobal;}
+        if(st&&p.committed){st.committed=true;st.commitAt=now();st.global=b.browsingContext?.currentWindowGlobal;
+          if(st.kind==="hard"&&st.global&&st.global!==st.oldGlobal&&painted.has(st.global))markPaint(st,"buffered paint");}
       }
       return;
     }
@@ -403,8 +404,10 @@ function install() {
     const s = active;
     if (!s || s.browser !== b || !s.committed) return;
     if(message.name==="SoftPaint"&&s.kind==="soft"&&message.data.token===s.token&&global===s.global&&stripHash(message.data.uri)===stripHash(s.uri))markPaint(s,"SPA update");
-    if (message.name === "Paint" && s.kind === "hard" && global === b.browsingContext?.currentWindowGlobal &&
-        global !== s.oldGlobal && global===s.global) markPaint(s,"new document paint");
+    if(message.name==="Paint"&&s.kind==="hard"&&global===b.browsingContext?.currentWindowGlobal&&
+       global!==s.oldGlobal&&stripHash(b.currentURI?.spec)===stripHash(s.uri)){
+      s.global=global;markPaint(s,"new document paint");
+    }
   }
   function requestURL(request, b) {
     try { return request.QueryInterface(Ci.nsIChannel).URI.spec; } catch { return b.currentURI?.spec; }
@@ -443,7 +446,7 @@ function install() {
       if (same) {
         if (previous && stripHash(previous) === stripHash(uri)) return;
         if(active?.browser===b){
-          if(active.uri!==uri){active.uri=uri;if(active.kind==="soft"&&active.firstPaint===null)watchSoft(active);}
+          if(active.uri!==uri){active.uri=uri;if(active.kind==="soft"){active.firstPaint=null;active.visibleAt=null;active.shield.style.opacity="1";watchSoft(active);}}
           return;
         }
         if(on("soft")){
@@ -545,7 +548,7 @@ function install() {
   }
   try {
     window[KEY].receive = receive;
-    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.1",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,lastResult});
+    window[KEY].diagnostics=()=>({enabled,snapshot:on("snapshot"),reducedMotion:motion.matches,actorRegistered:!!releaseActor,cacheReady:!!cached,cacheAge:cached?Math.round(now()-cached.at):null,active:!!active,pending:!!pending,version:"0.3.0-preview.2",destinationReady:active?.firstPaint!=null,revealing:active?.progress>0,shieldVisible:active?active.visibleAt===null:null,progress:active?.progress??null,radius:active?.radius??null,lastResult});
     gb.addTabsProgressListener(listener);
     for (const type of tabEvents) gb.tabContainer.addEventListener(type, tabChange);
     for (const [type, callback, capture] of windowEvents) window.addEventListener(type, callback, capture);
