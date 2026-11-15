@@ -78,3 +78,11 @@ No browser integration testing has been performed for this preview.
 ## Preview.7 deadline regression
 
 The deadline completion must interpolate across the reserved final interval, never jump immediately to full radius. Simulated controller checks at 60, 120 and 180 Hz verify monotonic progress, 800 ms minimum, bounded 4 s deadline, and no destination captures. Real browser validation remains necessary.
+
+## v0.3 aperture engine
+
+- [ ] Browser remains attached to the original `.browserStack` and viewport size is unchanged; old snapshot beneath it, dark base and shield, positive `circle()` on the browser itself.
+- [ ] Radius increases without any readiness/commit/network-stop event; no outgoing pixels appear through the aperture while the shield is opaque.
+- [ ] First contentful paint or actual SPA mutation releases only the dark shield, not the animation; new content continues painting inside the circle.
+- [ ] Confirm live remote-browser clipping and layer order in Zen/WebRender on Reddit, GitHub, Steam and YouTube. Generic SPA mutation detection is heuristic.
+- [ ] Back/forward, tab switches and module disable remove all temporary stack/browser attributes, CSS variables and sibling layers. No changes to unrelated browser styles.

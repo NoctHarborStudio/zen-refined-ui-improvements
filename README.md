@@ -20,9 +20,9 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle
 
 An optional navigation-aware liquid reveal for regular HTTP(S) pages. A neutral light-gray drop starts at the real click, grows and stretches in flight, turns gray at the center, and immediately becomes an expanding circle revealing the unscaled live destination. The old page remains visible outside the circle.
 
-- Minimum duration: 800 ms; maximum 4000 ms by default. The drop lands after 260 ms and the circle grows immediately. A committed destination is revealed live as soon as it paints (or after a bounded grace period); readiness controls only the completion curve, not when the network starts.
+- Minimum duration: 800 ms, maximum 4000 ms by default. The drop lands after 260 ms and the aperture expands continuously, independently of network completion. A dark disc fills the aperture immediately; when the new document paints, the disc fades to reveal the live destination.
 - Prepares a single outgoing viewport snapshot after navigation settles and refreshes it on pointer movement or scrolling; validation occurs before navigation; browser chrome inputs can also use a pre-command snapshot. No synchronous content readback on click. All snapshots are transient local memory. If no valid old frame exists, skip the transition rather than animate over the destination.
-- YouTube navigation-finish and generic DOM changes provide readiness hints. No repeated destination screenshots are taken during the animation. Partially loaded content may appear inside the aperture while the page continues loading.
+- The browser remains in its native `.browserStack`; a positive circular clip on the actual browser exposes it above an outgoing snapshot and dark base. A separate dark shield prevents the old document from showing inside the opening before a destination paint. Same-document readiness remains heuristic. No destination screenshots or resize/reparent operations.
 - Back/forward, history traversal, no explicit navigation origin, tab changes, dialogs and reduced motion use native behavior or cancel the animation.
 - Off by default while experimental. Enable **Adaptive Page Transitions** in Sine preferences. Capturing is required for the effect. No screenshot is written to disk or transmitted externally.
 

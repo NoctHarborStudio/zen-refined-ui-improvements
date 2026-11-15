@@ -83,37 +83,44 @@
   }
 }
 
-/* Adaptive Page Transitions — single cover clip, live destination. */
-.zr-page-transition {
-  position: fixed !important;
-  z-index: 2147483000 !important;
-  overflow: hidden !important;
-  pointer-events: none !important;
-  isolation: isolate;
-  contain: strict;
-}
-.zr-page-transition > * {
+/* Adaptive Page Transitions v0.3 — positive native browser clip.
+ * Stack-local siblings, no live-browser reparenting or viewport resize. */
+.browserStack[data-zr-aperture-stack] { isolation: isolate !important; }
+[data-zr-aperture-position] { position: relative !important; }
+.browserStack[data-zr-aperture-stack] > .zr-aperture-under,
+.browserStack[data-zr-aperture-stack] > .zr-aperture-above {
   position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  pointer-events: none !important;
+  overflow: hidden !important;
   margin: 0 !important;
   padding: 0 !important;
+  pointer-events: none !important;
+  contain: strict;
+  border-radius: inherit;
 }
-.zr-page-transition-cover {
-  overflow: hidden !important;
+.browserStack[data-zr-aperture-stack] > .zr-aperture-under { z-index: 10 !important; }
+.browserStack[data-zr-aperture-stack] > browser[data-zr-aperture-live] {
+  z-index: 11 !important;
+  clip-path: circle(var(--zr-aperture-radius, 0px) at 50% 50%) !important;
 }
-.zr-page-transition-cover > * {
+.browserStack[data-zr-aperture-stack] > .zr-aperture-above { z-index: 12 !important; }
+.zr-aperture-under > *, .zr-aperture-above > * {
   position: absolute !important;
   inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
   pointer-events: none !important;
 }
-.zr-page-transition-backdrop { background: transparent !important; }
-.zr-page-transition-shade { background: black; opacity: 0; }
-.zr-page-transition-art { overflow: hidden !important; }
+.zr-page-transition-backdrop { background: #171717 !important; }
+.zr-aperture-shade { background: #000; opacity: 0; }
+.zr-aperture-dark-base, .zr-aperture-shield {
+  background: #171717 !important;
+  clip-path: circle(var(--zr-aperture-radius, 0px) at 50% 50%) !important;
+}
+.zr-aperture-shield { opacity: 1; }
+.zr-aperture-art { overflow: hidden !important; }
 @media (prefers-reduced-motion: reduce) {
-  .zr-page-transition { display: none !important; }
+  .browserStack[data-zr-aperture-stack] > browser[data-zr-aperture-live] { clip-path: none !important; }
+  .zr-aperture-under, .zr-aperture-above { display: none !important; }
 }
