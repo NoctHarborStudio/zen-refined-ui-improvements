@@ -107,6 +107,40 @@
   },
   {
     "type": "dropdown",
+    "property": "zen.refined.transitions.duration",
+    "label": "Nominal liquid transition duration",
+    "value": "number",
+    "defaultValue": 700,
+    "placeholder": false,
+    "options": [
+      {
+        "label": "100 ms",
+        "value": 100
+      },
+      {
+        "label": "350 ms",
+        "value": 350
+      },
+      {
+        "label": "500 ms",
+        "value": 500
+      },
+      {
+        "label": "700 ms",
+        "value": 700
+      },
+      {
+        "label": "1000 ms",
+        "value": 1000
+      },
+      {
+        "label": "1500 ms",
+        "value": 1500
+      }
+    ]
+  },
+  {
+    "type": "dropdown",
     "property": "zen.refined.transitions.timeout",
     "label": "Page transition time limit",
     "value": "number",
@@ -150,7 +184,7 @@
   {
     "type": "checkbox",
     "property": "zen.refined.transitions.snapshot",
-    "label": "Preserve outgoing page when a valid snapshot is available",
+    "label": "Enable outgoing-page capture (required for liquid reveal)",
     "defaultValue": true
   },
   {
