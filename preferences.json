@@ -1,0 +1,102 @@
+[
+  {
+    "type": "checkbox",
+    "property": "zen.refined.bookmarks.enabled",
+    "label": "Enable Magnetic Bookmarks",
+    "defaultValue": true
+  },
+  {
+    "type": "dropdown",
+    "property": "zen.refined.bookmarks.scale",
+    "label": "Bookmark magnification",
+    "value": "number",
+    "defaultValue": 142,
+    "placeholder": false,
+    "options": [
+      {
+        "label": "110%",
+        "value": 110
+      },
+      {
+        "label": "125%",
+        "value": 125
+      },
+      {
+        "label": "135%",
+        "value": 135
+      },
+      {
+        "label": "142%",
+        "value": 142
+      },
+      {
+        "label": "150%",
+        "value": 150
+      }
+    ]
+  },
+  {
+    "type": "dropdown",
+    "property": "zen.refined.bookmarks.lift",
+    "label": "Upward lift",
+    "value": "number",
+    "defaultValue": 6,
+    "placeholder": false,
+    "options": [
+      {
+        "label": "Off",
+        "value": 0
+      },
+      {
+        "label": "3 px",
+        "value": 3
+      },
+      {
+        "label": "6 px",
+        "value": 6
+      },
+      {
+        "label": "9 px",
+        "value": 9
+      }
+    ]
+  },
+  {
+    "type": "dropdown",
+    "property": "zen.refined.bookmarks.duration",
+    "label": "Expansion animation duration",
+    "value": "number",
+    "defaultValue": 240,
+    "placeholder": false,
+    "options": [
+      {
+        "label": "120 ms",
+        "value": 120
+      },
+      {
+        "label": "180 ms",
+        "value": 180
+      },
+      {
+        "label": "240 ms",
+        "value": 240
+      },
+      {
+        "label": "320 ms",
+        "value": 320
+      }
+    ]
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.bookmarks.indicator",
+    "label": "Liquid hover indicator",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.bookmarks.glow",
+    "label": "Indicator glow",
+    "defaultValue": true
+  }
+]

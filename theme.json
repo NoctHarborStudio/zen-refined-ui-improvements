@@ -1,0 +1,31 @@
+{
+  "id": "9d788b55-d497-41da-8444-993c603e89e4",
+  "name": "Zen Refined — UI Improvements",
+  "description": "Modular visual and usability refinements for Zen Browser, starting with Magnetic Bookmarks.",
+  "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
+  "author": "NoctHarborStudio",
+  "version": "0.1.0-preview.1",
+  "style": {
+    "chrome": "chrome.css"
+  },
+  "preferences": "preferences.json",
+  "readme": "https://raw.githubusercontent.com/NoctHarborStudio/zen-refined-ui-improvements/preview/README.md",
+  "tags": [
+    "bookmarks",
+    "toolbar",
+    "animation"
+  ],
+  "createdAt": "2026-11-15",
+  "updatedAt": "2026-11-15T18:20:00Z",
+  "fork": [
+    "zen"
+  ],
+  "scripts": {
+    "bookmarks.uc.mjs": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ]
+    }
+  },
+  "supportsUnload": true
+}
