@@ -18,14 +18,13 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle
 
 ## Adaptive Page Transitions (experimental)
 
-An optional navigation-aware liquid reveal for regular HTTP(S) pages. A small glass-like drop flies from the actual pointer location to the center, then opens into the real, unscaled page. A valid pre-navigation capture can preserve the outgoing page; otherwise the effect runs directly over live content. No opaque placeholder or stretched screenshot is shown. Navigation itself is not intercepted or delayed.
+An optional navigation-aware liquid reveal for regular HTTP(S) pages. A neutral light-gray drop starts at the real click, grows and stretches in flight, turns gray at the center, and immediately becomes an expanding circle revealing the unscaled live destination. The old page remains visible outside the circle.
 
-- Uses top-level web-progress and first-contentful-paint signals where available.
-- YouTube uses its navigation-finish event when available; other same-document navigations use a bounded DOM-settling heuristic. Neither is an exact measurement of SPA readiness.
-- Finishes immediately for extremely fast loads or with a short final liquid reveal when content is ready; a strict 4-second default cap removes the overlay even if loading continues.
-- Cancels on tab selection, resize, Escape, dialogs, disabling or reduced-motion.
-- If the content actor is unavailable, uses Gecko's native pointer location and native progress events. Invalid or late snapshots are discarded. Some foreground new tabs and in-page interactions are intentionally not animated.
-- Off by default while experimental. Enable **Adaptive Page Transitions** in Sine's mod preferences. No page contents, screenshots or browsing history are stored or transmitted.
+- Nominal duration: 700 ms, with continuous readiness-based speed adjustment and a configurable hard cap (4 seconds by default). No pause at the center.
+- Captures the outgoing viewport in the content process on navigation pointer-down; browser chrome inputs use a pre-command snapshot. All snapshots are transient local memory. If no valid old frame exists, skip the transition rather than animate over the destination.
+- YouTube navigation-finish and generic SPA heuristics are used as optional readiness signals. A slow page may still load inside the expanding circle.
+- Back/forward, history traversal, no explicit navigation origin, tab changes, dialogs and reduced motion use native behavior or cancel the animation.
+- Off by default while experimental. Enable **Adaptive Page Transitions** in Sine preferences. Capturing is required for the effect. No screenshot is written to disk or transmitted externally.
 
 Review [transitions.uc.mjs](transitions.uc.mjs) and [actors](actors/) before enabling. Runtime verification in Zen/Sine is pending.
 
