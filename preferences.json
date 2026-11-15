@@ -150,7 +150,7 @@
   {
     "type": "checkbox",
     "property": "zen.refined.transitions.snapshot",
-    "label": "Capture outgoing page and clicked element",
+    "label": "Preserve outgoing page when a valid snapshot is available",
     "defaultValue": true
   },
   {
