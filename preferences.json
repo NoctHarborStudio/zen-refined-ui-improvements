@@ -138,7 +138,7 @@
   {
     "type": "checkbox",
     "property": "zen.refined.transitions.soft",
-    "label": "Animate same-document / SPA navigation",
+    "label": "Animate SPA navigation when content replacement can be confirmed (experimental)",
     "defaultValue": true
   },
   {

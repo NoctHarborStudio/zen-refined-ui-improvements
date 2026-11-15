@@ -133,3 +133,11 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] Gecko native FCP, buffered FCP and early visible DOM/paint checks release the hard-navigation shield before DOMContentLoaded or network completion where possible.
 - [ ] A destination snapshot with visible detail is sufficient after document identity is verified; no difference against old page is required.
 - [ ] Verify cold cross-origin navigation and repeated visit in Zen; SPA regional logic is unchanged. Diagnostics record navigation kind, document commit timing and paint reason.
+
+### 0.4.0-preview.1 — compositor pipeline
+
+- [ ] Document IDs and token/URI checks reject old, initial, stale or redirected document messages.
+- [ ] Use windowRoot MozAfterPaint, paintingSuppressed, FCP and transaction identity. No destination drawSnapshot calls, no pixel probes or forced compositor flushes.
+- [ ] A slow first frame keeps the aperture small, then performs a continuous reveal subject to the 800–4000 ms bounds. If unavailable, fade to native without a full-screen gray circle.
+- [ ] SPA: old paused or playing media and unrelated DOM changes cannot independently certify route replacement. Unconfirmed routes use native fallback. Actual SPA route semantics remain heuristic.
+- [ ] Runtime verification in Zen/WebRender is still required; the drained transaction queue is a weaker fallback than direct paint/composite evidence.
