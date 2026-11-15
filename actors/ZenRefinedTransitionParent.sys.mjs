@@ -10,9 +10,10 @@ export function acquireTransitionActor() {
         esModuleURI: BASE + "ZenRefinedTransitionChild.sys.mjs",
         events: {
           DOMWindowCreated: { capture: true },
+          pointerdown: { capture: true, mozSystemGroup: true },
           click: { capture: true, mozSystemGroup: true },
           pageshow: { capture: true },
-          MozAfterPaint: { capture: true }
+          DOMContentLoaded: { capture: true }
         }
       },
       allFrames: false,
