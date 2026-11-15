@@ -5,8 +5,9 @@
 const PREFIX = "zen.refined.transitions.";
 const KEY = "__zenRefinedPageTransitions";
 const NS = "http://www.w3.org/1999/xhtml";
-const ACTOR = "ZenRefinedLiquidTransition";
-const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedLiquidTransitionParent.sys.mjs";
+const SVG = "http://www.w3.org/2000/svg";
+const ACTOR = "ZenRefinedMorphTransition";
+const ACTOR_URI = "chrome://sine/content/9d788b55-d497-41da-8444-993c603e89e4/actors/ZenRefinedMorphTransitionParent.sys.mjs";
 const P = Ci.nsIWebProgressListener;
 const root = document.documentElement;
 const prefs = Services.prefs;
@@ -23,7 +24,7 @@ function install() {
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let active = null, origin = null, originTimer = 0, serial = 0, dead = false;
   let releaseActor = null, enabled = false;
-  let lastInput = null;
+  let historyUntil = 0;
   const painted = new WeakSet();
   const locations = new WeakMap();
   for (const b of gb.browsers) locations.set(b, b.currentURI?.spec || "");
@@ -43,228 +44,219 @@ function install() {
   function clearOrigin() {
     window.clearTimeout(originTimer);
     originTimer = 0;
-    if (origin) { origin.expired = true; origin.bitmap?.close?.(); origin.bitmap = null; }
+    if (origin) { origin.expired = true; origin.bitmap?.close?.(); origin.bitmap = null; origin.pixels=null; }
     origin = null;
   }
-  function capture(b, rec) {
-    if (!on("snapshot") || !rec.capture || rec.expired) return;
+  function validPixels(ctx, width, height) {
     try {
-      const global = b.browsingContext?.currentWindowGlobal;
-      const rect = b.getBoundingClientRect();
-      if (!global?.drawSnapshot || !isWeb(b.currentURI?.spec)) return;
-      rec.global = global;
-      rec.uri = b.currentURI?.spec;
-      const scale = clamp(1450 / Math.max(rect.width, rect.height), .12, .70);
-      global.drawSnapshot(null, scale, "transparent").then(bitmap => {
-        if (!bitmap) return;
-        // Never insert a screenshot that could belong to the destination.
-        if (rec.expired || dead || b.browsingContext?.currentWindowGlobal !== global ||
-            b.currentURI?.spec !== rec.uri) { bitmap.close?.(); return; }
-        if (active?.source === rec) {
-          if (!active.ready && !active.committed && now() - active.start < 110) applySnapshot(active, bitmap);
-          bitmap.close?.();
-        } else if (origin === rec) rec.bitmap = bitmap;
-        else bitmap.close?.();
-      }, () => {});
-    } catch {}
-  }
-  function remember(b, rect, capturePage = true) {
-    if (!safeBrowser(b)) return;
-    lastInput = { browser: b, x: rect.x, y: rect.y, at: now() };
-    if (active && active.browser === b && now() - active.start < 100) {
-      // Don't cancel a navigation if the input IPC arrives after web progress.
-      if (!active.source && active.flight < .20) {
-        active.from = point(b.getBoundingClientRect(), rect);
+      const sample = document.createElementNS(NS,"canvas");
+      sample.width=12; sample.height=8;
+      const c=sample.getContext("2d",{willReadFrequently:true});
+      c.drawImage(ctx.canvas,0,0,width,height,0,0,12,8);
+      const pixels=c.getImageData(0,0,12,8).data;
+      let lo=255,hi=0,opaque=0;
+      for(let i=0;i<pixels.length;i+=4){
+        if(pixels[i+3]<128)continue;
+        opaque++; const v=(pixels[i]+pixels[i+1]+pixels[i+2])/3;
+        lo=Math.min(lo,v);hi=Math.max(hi,v);
       }
-      return;
-    }
-    if (active) finish(active, "interaction");
-    clearOrigin();
-    origin = { browser: b, rect, at: now(), bitmap: null, expired: false, capture: capturePage };
-    capture(b, origin);
-    originTimer = window.setTimeout(clearOrigin, 1100);
+      return opaque>=60 && hi-lo>=8;
+    } catch {return false;}
   }
-  function newNode(tag, className) {
-    const el = document.createElementNS(NS, tag);
-    el.className = className;
+  function capture(b,rec) {
+    if(!on("snapshot") || rec.expired)return;
+    try {
+      const global=b.browsingContext?.currentWindowGlobal;
+      const bounds=b.getBoundingClientRect();
+      if(!global?.drawSnapshot || !isWeb(b.currentURI?.spec))return;
+      const uri=b.currentURI.spec;
+      const scale=clamp(1900/Math.max(bounds.width,bounds.height),.12,1);
+      // Browser chrome inputs (bookmarks/URL bar) have no content pointer actor.
+      // Capture before the command and accept only while the old URI is current.
+      global.drawSnapshot(null,scale,"transparent",{drawView:true}).then(bitmap=>{
+        if(!bitmap)return;
+        if(origin!==rec || rec.expired || dead || b.browsingContext?.currentWindowGlobal!==global ||
+            b.currentURI?.spec!==uri){bitmap.close?.();return;}
+        if(rec.bitmap)rec.bitmap.close?.();
+        rec.bitmap=bitmap;
+      },()=>{});
+    }catch{}
+  }
+  function remember(b,rect,pixels=null) {
+    if(!safeBrowser(b) || !on("snapshot"))return;
+    if(active)finish(active,"interaction");
+    clearOrigin();
+    origin={browser:b,rect,at:now(),bitmap:null,pixels,expired:false};
+    if(!pixels)capture(b,origin);
+    originTimer=window.setTimeout(clearOrigin,1400);
+  }
+  function newNode(tag,cls) {
+    const el=document.createElementNS(NS,tag);el.className=cls;return el;
+  }
+  function svg(tag,attrs={}){
+    const el=document.createElementNS(SVG,tag);
+    for(const [key,value] of Object.entries(attrs))el.setAttribute(key,String(value));
     return el;
   }
-  function applySnapshot(s, bitmap) {
-    if (active !== s || s.ready || !bitmap.width || !bitmap.height) return;
+  function drawSource(source,bounds) {
+    const canvas=newNode("canvas","zr-page-transition-backdrop");
     try {
-      // Reject blank/uniform snapshots: a real page remains visible instead.
-      const sample = newNode("canvas", "");
-      sample.width = 12; sample.height = 8;
-      const test = sample.getContext("2d", { willReadFrequently: true });
-      test.drawImage(bitmap, 0, 0, 12, 8);
-      const pixels = test.getImageData(0, 0, 12, 8).data;
-      let lo = 255, hi = 0, opaque = 0;
-      for (let i = 0; i < pixels.length; i += 4) {
-        if (pixels[i+3] < 128) continue;
-        opaque++;
-        const v = (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
-        lo = Math.min(lo,v); hi = Math.max(hi,v);
-      }
-      if (opaque < 60 || hi-lo < 12) { debug("snapshot skipped: blank"); return; }
-      s.backdrop.width = bitmap.width;
-      s.backdrop.height = bitmap.height;
-      s.backdrop.getContext("2d").drawImage(bitmap, 0, 0);
-      s.hasSnapshot = true;
-      s.backdrop.style.visibility = "visible";
-      debug("snapshot accepted");
-    } catch { debug("snapshot unavailable"); }
+      const pixels=source.pixels,bitmap=source.bitmap;
+      if(pixels){
+        const {width,height,data}=pixels;
+        if(!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||
+          width>2200||height>2200||width*height>3000000||data?.length!==width*height*4)return null;
+        canvas.width=width;canvas.height=height;
+        const ctx=canvas.getContext("2d");const img=ctx.createImageData(width,height);
+        img.data.set(data);ctx.putImageData(img,0,0);
+      }else if(bitmap){
+        canvas.width=bitmap.width;canvas.height=bitmap.height;
+        canvas.getContext("2d").drawImage(bitmap,0,0);
+      }else return null;
+      const ratio=canvas.width/canvas.height, expected=bounds.width/bounds.height;
+      if(Math.abs(ratio/expected-1)>.10 || !validPixels(canvas.getContext("2d"),canvas.width,canvas.height))return null;
+      return canvas;
+    }catch{return null;}
   }
-  function point(bounds, rect) {
-    if (!rect || !Number.isFinite(rect.x) || !Number.isFinite(rect.y))
-      return { x: bounds.width / 2, y: bounds.height / 2 };
-    return { x: clamp(rect.x - bounds.left, 0, bounds.width),
-      y: clamp(rect.y - bounds.top, 0, bounds.height) };
+  function point(bounds,rect){
+    return {x:clamp(rect.x-bounds.left,0,bounds.width),y:clamp(rect.y-bounds.top,0,bounds.height)};
   }
-  function nativePoint(b, bounds) {
-    if (lastInput?.browser === b && now() - lastInput.at < 1100) return point(bounds,lastInput);
-    // Gecko exposes the native pointer even when the content process actor
-    // cannot deliver the click. No event interception or synthetic clicks.
-    try {
-      const x = {}, y = {};
-      window.windowUtils.getLastOverWindowPointerLocationInCSSPixels(x,y);
-      if (Number.isFinite(x.value) && Number.isFinite(y.value) && (x.value || y.value))
-        return point(bounds,{ x:x.value,y:y.value });
-    } catch {}
-    return point(bounds,null);
-  }
-  function begin(b, kind, uri) {
-    if (!safeBrowser(b) || !isWeb(uri) || (kind === "soft" && !on("soft"))) return null;
-    if (active) finish(active, "superseded");
-    const bounds = b.getBoundingClientRect();
-    let source = origin?.browser === b && now() - origin.at < 1100 ? origin : null;
-    if (source) { window.clearTimeout(originTimer); originTimer = 0; origin = null; }
-    else clearOrigin();
-    const overlay = newNode("div", "zr-page-transition");
-    const backdrop = newNode("canvas", "zr-page-transition-backdrop");
-    const shade = newNode("div", "zr-page-transition-shade");
-    const drop = newNode("div", "zr-page-transition-drop");
-    const ring = newNode("div", "zr-page-transition-ring");
-    overlay.append(backdrop, shade, ring, drop);
-    Object.assign(overlay.style, { left: bounds.left + "px", top: bounds.top + "px", width: bounds.width + "px", height: bounds.height + "px" });
-    const start = now();
-    const s = { token: ++serial, browser:b, kind, uri, start, timeout:maxTime(),
-      w:bounds.width, h:bounds.height, left:bounds.left, top:bounds.top,
-      overlay, backdrop, shade, drop, ring, source, from: source ? point(bounds,source.rect) : nativePoint(b,bounds),
-      committed:kind === "soft", global:kind === "soft" ? b.browsingContext?.currentWindowGlobal : null,
-      oldGlobal:b.browsingContext?.currentWindowGlobal, progress:0, flight:0, reveal:0,
-      flightVelocity:0, ready:null, raf:0, timer:0, last:start, lastGeometry:start,
-      hasSnapshot:false, dim:on("dim"), youtube:/^https?:\/\/(?:[^/]+\.)?youtube\.com\//i.test(uri) };
+  function begin(b,kind,uri){
+    if(!safeBrowser(b)||!isWeb(uri)||!on("snapshot")||now()<historyUntil||
+       (kind==="soft"&&!on("soft")))return null;
+    if(active)finish(active,"superseded");
+    const bounds=b.getBoundingClientRect();
+    const source=origin?.browser===b && now()-origin.at<1400 ? origin:null;
+    // No guessed pointer and no free-floating loading animation. History,
+    // redirects without user intent, and failed captures remain native.
+    if(!source){debug("skip: no explicit origin");return null;}
+    window.clearTimeout(originTimer);originTimer=0;origin=null;
+    const backdrop=drawSource(source,bounds);
+    source.expired=true;source.bitmap?.close?.();source.bitmap=null;source.pixels=null;
+    if(!backdrop){debug("skip: no valid outgoing snapshot");return null;}
+    const overlay=newNode("div","zr-page-transition"),shade=newNode("div","zr-page-transition-shade");
+    const art=svg("svg",{class:"zr-page-transition-art",viewBox:"0 0 "+bounds.width+" "+bounds.height});
+    const defs=svg("defs"),gradient=svg("linearGradient",{id:"zr-morph-drop-fill",x1:"0",y1:"0",x2:"0",y2:"1"});
+    const light=svg("stop",{offset:"0%","stop-color":"#dedede"}),dark=svg("stop",{offset:"100%","stop-color":"#a8a8a8"});
+    gradient.append(light,dark);defs.append(gradient);
+    const ring=svg("circle",{cx:bounds.width/2,cy:bounds.height/2,r:23,fill:"none",stroke:"#888","stroke-width":"1.5",opacity:"0"});
+    const fill=svg("circle",{cx:bounds.width/2,cy:bounds.height/2,r:23,fill:"#737373",opacity:"0"});
+    const drop=svg("path",{fill:"url(#zr-morph-drop-fill)",stroke:"#969696","stroke-width":"1.25"});
+    art.append(defs,fill,ring,drop);overlay.append(backdrop,shade,art);
+    Object.assign(overlay.style,{left:bounds.left+"px",top:bounds.top+"px",width:bounds.width+"px",height:bounds.height+"px"});
+    const start=now(),nominal=clamp(prefs.getIntPref(PREFIX+"duration",700),100,1500);
+    const s={token:++serial,browser:b,kind,uri,start,timeout:maxTime(),nominal,
+      w:bounds.width,h:bounds.height,left:bounds.left,top:bounds.top,overlay,backdrop,shade,art,drop,ring,fill,light,dark,
+      from:point(bounds,source.rect),committed:kind==="soft",global:kind==="soft"?b.browsingContext?.currentWindowGlobal:null,
+      oldGlobal:b.browsingContext?.currentWindowGlobal,readyAt:null,raf:0,timer:0,last:start,lastGeometry:start,
+      clock:0,rate:1,flightMs:Math.min(280,nominal*.36),dim:on("dim"),youtube:/^https?:\/\/(?:[^/]+\.)?youtube\.com\//i.test(uri)};
     active=s;
     try {
       root.append(overlay);
-      if (source?.bitmap) { applySnapshot(s,source.bitmap); source.bitmap.close?.(); source.bitmap=null; }
-      // Only use a pre-navigation capture. A late capture is often the new page
-      // or a blank frame; with no snapshot we animate directly over live content.
-      render(s,start);
+      render(s);
       s.timer=window.setTimeout(()=>finish(s,"timeout"),s.timeout);
       s.raf=window.requestAnimationFrame(t=>tick(s,t));
-      debug("start",kind,source ? "input-origin" : "native-pointer");
-      if (kind === "soft") {
+      debug("start",kind,"validated snapshot");
+      if(kind==="soft"){
         const actor=getActor(b);
-        if (actor) {
-          try { actor.sendAsyncMessage("WatchSoft",{token:s.token}); }
-          catch { markReady(s); }
-          s.softTimer=window.setTimeout(()=>markReady(s),Math.min(s.timeout-150,s.youtube?2800:1400));
-        } else s.softTimer=window.setTimeout(()=>markReady(s),s.youtube?700:320);
+        try{actor?.sendAsyncMessage("WatchSoft",{token:s.token});}catch{}
+        s.softTimer=window.setTimeout(()=>markReady(s),Math.min(s.timeout-30,s.youtube?2800:1400));
       }
       return s;
-    } catch(error) { finish(s,"setup-error"); console.warn("[Zen Refined transitions]",error); return null; }
+    }catch(error){finish(s,"setup-error");console.warn("[Zen Refined transitions]",error);return null;}
   }
-  function render(s,time) {
-    const f=clamp(s.flight,0,1), q=clamp(s.reveal,0,1);
-    const cx0=s.w/2, cy0=s.h/2;
-    const dx=cx0-s.from.x, dy=cy0-s.from.y;
-    const distance=Math.hypot(dx,dy);
-    const bend=Math.min(38,distance*.07)*Math.sin(Math.PI*f);
-    const cx=lerp(s.from.x,cx0,f) - (distance?dy/distance*bend:0);
-    const cy=lerp(s.from.y,cy0,f) + (distance?dx/distance*bend:0);
-    const angle=Math.atan2(dy,dx)*180/Math.PI;
-    const speedStretch=clamp(s.flightVelocity*.12,0,.95)*(1-f*.4);
-    const base=lerp(.22,.68,ease(f)) + (1-q)*.055*Math.sin((time-s.start)/180)*ease(f);
-    const grow=1+q*2.8;
-    s.drop.style.transform="translate3d("+cx+"px,"+cy+"px,0) rotate("+angle+"deg) scale("+
-      (base*grow*(1+speedStretch))+","+(base*grow/(1+speedStretch*.44))+")";
-    s.drop.style.opacity=String((1-ease(clamp((q-.02)/.44,0,1)))*ease(Math.min(1,(time-s.start+16)/65)));
-    // The expanding hole reveals the real, unscaled browser. The old capture
-    // never fills the hole, and a missing capture never creates an opaque card.
-    const rx=lerp(12,Math.hypot(s.w,s.h)*.73+36,q);
-    const ry=lerp(12,Math.hypot(s.w,s.h)*.73+36,q);
-    const mask="radial-gradient(ellipse "+rx+"px "+ry+"px at "+cx+"px "+cy+"px, transparent 0%, transparent 95%, black 100%)";
-    if (s.hasSnapshot && q>0) {
-      s.backdrop.style.maskImage=mask;
-      s.backdrop.style.opacity=String(1-ease(clamp((q-.78)/.22,0,1)));
-    }
-    s.shade.style.opacity=String(s.dim ? .16*ease(f)*(1-q) : 0);
-    if (q>0) {
-      s.ring.style.opacity=String(.48*Math.sin(Math.PI*q));
-      s.ring.style.transform="translate3d("+cx+"px,"+cy+"px,0) scale("+(rx/32)+","+(ry/32)+")";
-    }
+  function dropPath(r,stretch){
+    const k=.55228475,tail=r*(1+stretch*1.7),h=r*(1-stretch*.20);
+    return "M "+(-tail)+" 0 C "+(-tail)+" "+(-h*k*(1-stretch*.7))+" "+(-r*k)+" "+(-h)+" 0 "+(-h)+
+      " C "+(r*k)+" "+(-h)+" "+r+" "+(-h*k)+" "+r+" 0 C "+r+" "+(h*k)+" "+(r*k)+" "+h+" 0 "+h+
+      " C "+(-r*k)+" "+h+" "+(-tail)+" "+(h*k*(1-stretch*.7))+" "+(-tail)+" 0 Z";
   }
-  function tick(s,time) {
-    if (active !== s) return;
-    if (!enabled || motion.matches || s.browser !== gb.selectedBrowser) return finish(s,"context");
-    if (time-s.lastGeometry>125) {
+  function render(s){
+    const flight=clamp(s.clock/s.flightMs,0,1);
+    const f=ease(flight),cx=s.w/2,cy=s.h/2;
+    const t=clamp((s.clock-s.flightMs)/(s.nominal-s.flightMs),0,1);
+    if(flight<1){
+      const dx=cx-s.from.x,dy=cy-s.from.y,d=Math.hypot(dx,dy)||1;
+      const bend=Math.min(25,d*.045)*Math.sin(Math.PI*f);
+      const x=s.from.x+dx*f-dy/d*bend,y=s.from.y+dy*f+dx/d*bend;
+      const r=lerp(6,23,f),stretch=Math.pow(Math.sin(Math.PI*flight),1.25)*.93;
+      const grey=ease((flight-.66)/.34);
+      const light=Math.round(lerp(222,128,grey)),dark=Math.round(lerp(168,99,grey));
+      s.drop.setAttribute("d",dropPath(r,stretch));
+      s.drop.setAttribute("transform","translate("+x+" "+y+") rotate("+(Math.atan2(dy,dx)*180/Math.PI)+")");
+      s.light.setAttribute("stop-color","rgb("+light+","+light+","+light+")");
+      s.dark.setAttribute("stop-color","rgb("+dark+","+dark+","+dark+")");
+      s.shade.style.opacity=String(s.dim?.08*f:0);
+      return;
+    }
+    // At exactly the endpoint of the flight the drop is a radius-23 circle.
+    // The mask opens on that SAME frame, then grows monotonically.
+    const growth=1-Math.pow(1-t,3)*(1+3*t);
+    const radius=lerp(23,Math.hypot(cx,cy)+3,growth);
+    const mask="radial-gradient(circle at 50% 50%, transparent "+Math.max(0,radius-.7)+"px, black "+(radius+.7)+"px)";
+    s.backdrop.style.maskImage=mask;
+    s.shade.style.maskImage=mask;
+    s.shade.style.opacity=String(s.dim?.08*(1-t):0);
+    s.drop.setAttribute("opacity","0");
+    s.fill.setAttribute("r",String(radius));
+    s.fill.setAttribute("opacity",String(1-ease(t/.13)));
+    s.ring.setAttribute("r",String(radius));
+    s.ring.setAttribute("opacity",String(1-ease((t-.82)/.18)));
+  }
+  function tick(s,time){
+    if(active!==s)return;
+    if(!enabled||motion.matches||s.browser!==gb.selectedBrowser)return finish(s,"context");
+    if(time-s.lastGeometry>125){
       s.lastGeometry=time;
-      if (!safeBrowser(s.browser)) return finish(s,"context");
+      if(!safeBrowser(s.browser))return finish(s,"context");
       const r=s.browser.getBoundingClientRect();
-      if (Math.abs(r.width-s.w)>6 || Math.abs(r.height-s.h)>6 || Math.abs(r.left-s.left)>6 || Math.abs(r.top-s.top)>6)
+      if(Math.abs(r.width-s.w)>6||Math.abs(r.height-s.h)>6||Math.abs(r.left-s.left)>6||Math.abs(r.top-s.top)>6)
         return finish(s,"resize");
     }
     const elapsed=Math.max(0,time-s.start);
-    if (elapsed>=s.timeout) return finish(s,"timeout");
-    const dt=clamp((time-s.last)/1000,0,.10); s.last=time;
-    // Analytic time-based damping, not a per-frame lerp: consistent at
-    // 60/120/180 Hz, with a smooth velocity change when readiness arrives.
-    const rate=s.ready ? 19 : 9.5;
-    const next=1-(1-s.flight)*Math.exp(-rate*dt);
-    s.flightVelocity=dt>0?(next-s.flight)/dt:0;
-    s.flight=next;
-    if (!s.ready && elapsed>=s.timeout-240) markReady(s);
-    if (s.ready) {
-      const since=Math.max(0,time-s.ready.at);
-      s.reveal=ease(clamp(since/s.ready.duration,0,1));
-      if (since>=s.ready.duration) return finish(s,"ready");
-    }
-    render(s,time);
+    if(elapsed>=s.timeout)return finish(s,"timeout");
+    const dt=Math.max(0,time-s.last);s.last=time;
+    // A single virtual clock controls both phases: it never pauses at center.
+    // Normal loads use 700ms; early readiness accelerates, an unready page
+    // slows the reveal but never stops it or artificially delays the network.
+    const ready=s.readyAt!==null;
+    let target=ready?(s.readyAt-s.start<110?2.8:1.15):(s.clock<s.flightMs?1:.43);
+    const minimum=(s.nominal-s.clock)/Math.max(1,s.timeout-elapsed-16);
+    target=Math.max(target,minimum,.12);
+    const oldRate=s.rate,decay=Math.exp(-dt/55);
+    s.rate=target+(oldRate-target)*decay;
+    s.clock=Math.min(s.nominal,s.clock+target*dt+(oldRate-target)*55*(1-decay));
+    if(s.clock>=s.nominal)return finish(s,"complete");
+    render(s);
     s.raf=window.requestAnimationFrame(t=>tick(s,t));
   }
-  function markReady(s) {
-    if (active!==s || s.ready) return;
-    const elapsed=now()-s.start, remaining=s.timeout-elapsed;
-    if (remaining<=20 || elapsed<25) return finish(s,"fast-ready");
-    // Fast loads get a short reveal; longer loads get a proper liquid morph.
-    const duration=Math.min(remaining,clamp(80+elapsed*.32,90,260));
-    s.ready={at:now(),duration};
-    debug("ready",Math.round(elapsed)+"ms");
+  function markReady(s){
+    if(active!==s||s.readyAt!==null)return;
+    s.readyAt=now();
+    debug("ready",Math.round(s.readyAt-s.start)+"ms");
   }
-  function finish(s,reason) {
-    if (active!==s) return;
-    active=null;
-    window.cancelAnimationFrame(s.raf);
-    window.clearTimeout(s.timer);
-    window.clearTimeout(s.softTimer);
-    if (s.source) { s.source.expired=true; s.source.bitmap?.close?.(); s.source.bitmap=null; }
-    if (s.kind==="soft") { try { getActor(s.browser)?.sendAsyncMessage("CancelSoft"); } catch {} }
-    s.overlay.remove();
-    debug("finish",reason,Math.round(now()-s.start)+"ms");
+  function finish(s,reason){
+    if(active!==s)return;
+    active=null;window.cancelAnimationFrame(s.raf);window.clearTimeout(s.timer);window.clearTimeout(s.softTimer);
+    if(s.kind==="soft"){try{getActor(s.browser)?.sendAsyncMessage("CancelSoft");}catch{}}
+    s.overlay.remove();debug("finish",reason,Math.round(now()-s.start)+"ms");
   }
-  function cancel() {
-    if (active) finish(active, "cancel");
-    clearOrigin();
-    lastInput=null;
+  function cancel(){
+    if(active)finish(active,"cancel");clearOrigin();
+  }
+  function history(){
+    cancel();historyUntil=now()+1100;
   }
   function receive(b, global, message) {
     if (!safeBrowser(b)) return;
+    if (message.name === "History") { history(); return; }
     if (message.name === "Origin") {
       const d = message.data;
       if (![d.x, d.y, d.vw, d.vh].every(Number.isFinite) || d.vw <= 0 || d.vh <= 0) return;
       const r = b.getBoundingClientRect(), sx = r.width / d.vw, sy = r.height / d.vh;
-      remember(b, { x: r.left + d.x * sx, y: r.top + d.y * sy }, !!d.navigation);
+      if (!d.navigation) return;
+      historyUntil=0;
+      remember(b, { x:r.left+d.x*sx,y:r.top+d.y*sy },d.pixels||null);
       return;
     }
     if (message.name === "Paint") painted.add(global);
@@ -316,28 +308,40 @@ function install() {
         }
       }
     },
-    onProgressChange(b, wp, request, curSelf, maxSelf, curTotal, maxTotal) {
-      if (active?.browser === b && active.kind === "hard" && wp?.isTopLevel && maxTotal > 0)
-        active.progress = Math.max(active.progress, clamp(curTotal / maxTotal, 0, 1));
-    }
+
   };
-  function chromePointer(event) {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    const el = event.target?.closest?.("toolbarbutton.bookmark-item, #urlbar, #back-button, #forward-button, #reload-button");
-    if (!el || !on("chrome")) return;
-    if (active) finish(active,"pointer");
-    remember(gb.selectedBrowser, { x: event.clientX, y: event.clientY });
+  function chromePointer(event){
+    if([3,4].includes(event.button)){history();return;}
+    if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    if(event.target?.closest?.("#back-button,#forward-button,[command='Browser:Back'],[command='Browser:Forward']")){
+      history();return;
+    }
+    const el=event.target?.closest?.("toolbarbutton.bookmark-item,#urlbar,#reload-button");
+    if(!el||!on("chrome"))return;
+    historyUntil=0;
+    remember(gb.selectedBrowser,{x:event.clientX,y:event.clientY});
   }
-  function key(event) {
-    if (event.key === "Escape") { cancel(); return; }
-    if (event.key === "Enter" && on("chrome") && event.target?.closest?.("#urlbar")) {
-      const r = document.getElementById("urlbar")?.getBoundingClientRect();
-      if (r) remember(gb.selectedBrowser, { x: r.x+r.width/2, y: r.y+r.height/2 });
+  function command(event){
+    if(/^(Browser:(Back|Forward)|cmd_(back|forward))$/i.test(event.target?.id||"")||
+       /^(Browser:(Back|Forward)|cmd_(back|forward))$/i.test(event.target?.getAttribute?.("command")||""))history();
+  }
+  function key(event){
+    if(event.key==="Escape"){cancel();return;}
+    if((event.altKey&&["ArrowLeft","ArrowRight"].includes(event.key))||
+       ["BrowserBack","BrowserForward","GoBack","GoForward"].includes(event.key)){history();return;}
+    if(event.key==="Enter"&&on("chrome")&&event.target?.closest?.("#urlbar")){
+      const r=document.getElementById("urlbar")?.getBoundingClientRect();
+      if(r){
+        historyUntil=0;
+        // Preserve an existing pre-command snapshot from the address-bar click.
+        if(origin?.browser===gb.selectedBrowser&&(origin.bitmap||origin.pixels))origin.at=now();
+        else remember(gb.selectedBrowser,{x:r.x+r.width/2,y:r.y+r.height/2});
+      }
     }
   }
   function settings() {
     enabled = on("enabled", false);
-    if (!enabled || motion.matches) {
+    if (!enabled || motion.matches || !on("snapshot")) {
       cancel();
       releaseActor?.(); releaseActor = null;
     } else if (!releaseActor) {
@@ -346,7 +350,7 @@ function install() {
     }
   }
   const tabEvents = ["TabSelect", "TabClose"];
-  const windowEvents = [["pointerdown", chromePointer, true], ["keydown", key, true],
+  const windowEvents = [["pointerdown", chromePointer, true], ["keydown", key, true], ["command",command,true],
     ["resize", cancel, false], ["deactivate", cancel, false], ["beforecustomization", cancel, false],
     ["fullscreen", cancel, false], ["popupshowing", cancel, true]];
   function destroy() {
