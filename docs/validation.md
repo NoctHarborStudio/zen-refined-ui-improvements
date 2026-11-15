@@ -92,3 +92,11 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] Unpainted navigation uses the full slow timeline instead of a premature completion; the animation never waits at a fixed radius.
 - [ ] First paint arriving after the document global changes is accepted if the committed destination matches.
 - [ ] Content mutation tracking before SPA navigation is bounded to 1.8 s after input, not permanently active.
+
+### Preview.3: live reveal without clipping the remote browser
+
+- [ ] The browser itself receives no clip-path, z-index, position or attributes. Only the static cover and dark shield are clipped.
+- [ ] With content actor silent, one low-resolution changed viewport can release the shield; black/uniform/unchanged snapshots cannot. Stop probing immediately on first frame.
+- [ ] YouTube first media frame and SPA visibility/attribute mutations are additional first-update hints; do not wait for network completion.
+- [ ] Transition starts at normal speed, slows only after 420ms without a first frame; committed pages are not automatically stretched to 4s.
+- [ ] Diagnostics lastResult includes firstPaintMs, paintReason and probeCount. Real compositor output still requires Zen testing.

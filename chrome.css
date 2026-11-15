@@ -83,27 +83,16 @@
   }
 }
 
-/* Adaptive Page Transitions v0.3 — positive native browser clip.
- * Stack-local siblings, no live-browser reparenting or viewport resize. */
-.browserStack[data-zr-aperture-stack] { isolation: isolate !important; }
-[data-zr-aperture-position] { position: relative !important; }
-.browserStack[data-zr-aperture-stack] > .zr-aperture-under,
-.browserStack[data-zr-aperture-stack] > .zr-aperture-above {
-  position: absolute !important;
+/* Adaptive Page Transitions — live browser is never clipped or restyled. */
+.zr-live-reveal {
+  position: fixed !important;
+  z-index: 2147483000 !important;
   overflow: hidden !important;
-  margin: 0 !important;
-  padding: 0 !important;
   pointer-events: none !important;
+  isolation: isolate;
   contain: strict;
-  border-radius: inherit;
 }
-.browserStack[data-zr-aperture-stack] > .zr-aperture-under { z-index: 10 !important; }
-.browserStack[data-zr-aperture-stack] > browser[data-zr-aperture-live] {
-  z-index: 11 !important;
-  clip-path: circle(var(--zr-aperture-radius, 0px) at 50% 50%) !important;
-}
-.browserStack[data-zr-aperture-stack] > .zr-aperture-above { z-index: 12 !important; }
-.zr-aperture-under > *, .zr-aperture-above > * {
+.zr-live-reveal > *, .zr-live-reveal-cover > * {
   position: absolute !important;
   inset: 0 !important;
   width: 100% !important;
@@ -112,15 +101,15 @@
   padding: 0 !important;
   pointer-events: none !important;
 }
+.zr-live-reveal-cover { background: #171717; mask-mode: alpha; }
 .zr-page-transition-backdrop { background: #171717 !important; }
-.zr-aperture-shade { background: #000; opacity: 0; }
-.zr-aperture-dark-base, .zr-aperture-shield {
+.zr-live-reveal-shade { background: black; opacity: 0; }
+.zr-live-reveal-shield {
   background: #171717 !important;
-  clip-path: circle(var(--zr-aperture-radius, 0px) at 50% 50%) !important;
+  clip-path: circle(0px at 50% 50%);
+  opacity: 1;
 }
-.zr-aperture-shield { opacity: 1; }
-.zr-aperture-art { overflow: hidden !important; }
+.zr-live-reveal-art { overflow: hidden !important; }
 @media (prefers-reduced-motion: reduce) {
-  .browserStack[data-zr-aperture-stack] > browser[data-zr-aperture-live] { clip-path: none !important; }
-  .zr-aperture-under, .zr-aperture-above { display: none !important; }
+  .zr-live-reveal { display: none !important; }
 }
