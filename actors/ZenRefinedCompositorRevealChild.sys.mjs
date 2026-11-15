@@ -75,15 +75,41 @@ function routeEvidence(before,after,win){
 function paintForWindow(event,win){
   if(!event?.isTrusted)return false;
   try{
-    const target=event.originalTarget||event.target;
-    return (target===win||target===win.document||target?.defaultView===win)&&Number(event.transactionId)>0&&Number(event.paintTimeStamp)>=0;
+    const match=target=>target===win||target===win.document||target?.defaultView===win;
+    return (match(event.originalTarget)||match(event.target))&&Number(event.transactionId)>0&&Number(event.paintTimeStamp)>=0;
   }catch{return false;}
+}
+function visibleDocumentContent(win){
+  try{
+    const doc=win.document,body=doc.body;if(!body)return false;
+    const walker=doc.createTreeWalker(body,4);let node,i=0;
+    while((node=walker.nextNode())&&i++<120){
+      if(!node.nodeValue?.trim()||!node.parentElement||node.parentElement.closest("script,style,template,noscript"))continue;
+      if(visible(node.parentElement,win))return true;
+    }
+    for(const el of [...body.querySelectorAll("img,video,svg,canvas,iframe")].slice(0,32)){
+      if(!visible(el,win))continue;
+      if(el.localName==="img"&&el.naturalWidth<=0)continue;
+      if(el.localName==="video"&&el.readyState<2)continue;
+      return true;
+    }
+  }catch{}
+  return false;
+}
+function observePaint(event,win){
+  if(!paintForWindow(event,win))return null;
+  const st=state(win);let nonempty=false;
+  try{const r=event.boundingClientRect;nonempty=!!r&&r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<win.innerWidth&&r.top<win.innerHeight;}catch{}
+  const transaction=Number(event.transactionId);
+  return {stamp:Number(event.paintTimeStamp),transaction,
+    contentful:st.suppressed===false&&nonempty&&transaction>=st.transaction&&st.pending===false&&visibleDocumentContent(win)};
 }
 function hardEvidence(win,observed){
   const st=state(win);if(st.suppressed!==false)return null;
   if(compositeTime(win)>0)return {reason:"contentful-composite",transaction:st.transaction};
-  const entry=fcp(win);if(!entry)return null;
-  if(observed&&observed.stamp+4>=entry.startTime&&observed.transaction>0)return {reason:"contentful-after-paint",transaction:observed.transaction};
+  const entry=fcp(win);
+  if(entry&&observed&&observed.stamp+4>=entry.startTime&&observed.transaction>0)return {reason:"contentful-after-paint",transaction:observed.transaction};
+  if(!entry&&observed?.contentful&&observed.transaction>=st.transaction&&st.pending===false)return {reason:"visible-document-paint",transaction:observed.transaction};
   return null;
 }
 export class ZenRefinedCompositorRevealChild extends JSWindowActorChild {
@@ -93,7 +119,7 @@ export class ZenRefinedCompositorRevealChild extends JSWindowActorChild {
     const win=this.contentWindow;if(!win)return;
     let timer=0,done=false;const root=win.windowRoot;
     const clean=()=>{if(done)return;done=true;win.clearTimeout(timer);try{root?.removeEventListener("MozAfterPaint",paint,true);}catch{}if(this.#initialCleanup===clean)this.#initialCleanup=null;};
-    const paint=e=>{if(!paintForWindow(e,win))return;this.#paint={stamp:Number(e.paintTimeStamp),transaction:Number(e.transactionId)};if(hardEvidence(win,this.#paint))clean();};
+    const paint=e=>{const observed=observePaint(e,win);if(!observed)return;this.#paint=observed;if(hardEvidence(win,this.#paint))clean();};
     this.#initialCleanup=clean;
     try{root?.addEventListener("MozAfterPaint",paint,true);timer=win.setTimeout(clean,4500);}catch{clean();}
   }
@@ -124,7 +150,7 @@ export class ZenRefinedCompositorRevealChild extends JSWindowActorChild {
     if(kind==="soft"&&(!initial?.frame||initial.uri!==route(oldURI)||win.performance.now()-initial.at>2500)){
       this.#send("Unsupported",{...base,reason:"no-pre-navigation-content"});return;
     }
-    let timer=0,raf=0,hard=0,observer,done=false,paintObserver,lastStatus="",candidate=null,observed=this.#paint,dirty=true,drainedAt=null,mutationAt=initial?.at||0;
+    let timer=0,raf=0,hard=0,observer,done=false,paintObserver,lastStatus="",candidate=null,observed=this.#paint,dirty=true,drainedAt=null,drainedRefresh=false,mutationAt=initial?.at||0;
     const root=win.windowRoot,same=()=>route(win.location.href)===route(uri);
     const clean=()=>{
       if(done)return;done=true;win.clearTimeout(timer);win.clearTimeout(hard);win.cancelAnimationFrame(raf);
@@ -143,16 +169,16 @@ export class ZenRefinedCompositorRevealChild extends JSWindowActorChild {
       timer=0;if(done)return;
       if(!same()){schedule();return;}
       const st=state(win);report(st);
-      if(st.suppressed!==false){drainedAt=null;schedule();return;}
+      if(st.suppressed!==false){drainedAt=null;drainedRefresh=false;schedule();return;}
       if(kind==="hard"){
         const proof=hardEvidence(win,observed);if(proof){ready(proof);return;}
         // Weaker fallback for a paint completed before the listener was installed.
         // Require a recorded FCP and a drained, stable nonzero transaction.
         if(fcp(win)&&st.pending===false&&st.transaction>0){
-          if(drainedAt===st.transaction){ready({reason:"contentful-drained",transaction:st.transaction});return;}
-          drainedAt=st.transaction;
-          if(!raf)raf=win.requestAnimationFrame(()=>{raf=win.requestAnimationFrame(()=>{raf=0;schedule(0);});});
-        }else drainedAt=null;
+          if(drainedAt===st.transaction&&drainedRefresh){ready({reason:"contentful-drained",transaction:st.transaction});return;}
+          if(drainedAt!==st.transaction){drainedAt=st.transaction;drainedRefresh=false;}
+          if(!raf){const tx=st.transaction;raf=win.requestAnimationFrame(()=>{raf=win.requestAnimationFrame(()=>{raf=0;drainedRefresh=drainedAt===tx;schedule(0);});});}
+        }else{drainedAt=null;drainedRefresh=false;}
       }else if(dirty){
         dirty=false;
         const after=snapshotRoute(win,doc);
@@ -168,10 +194,10 @@ export class ZenRefinedCompositorRevealChild extends JSWindowActorChild {
     };
     const onPaint=e=>{
       if(!paintForWindow(e,win))return;
-      observed={stamp:Number(e.paintTimeStamp),transaction:Number(e.transactionId)};this.#paint=observed;
+      observed=kind==="hard"?observePaint(e,win):{stamp:Number(e.paintTimeStamp),transaction:Number(e.transactionId)};if(!observed)return;this.#paint=observed;
       if(!same()||state(win).suppressed!==false)return;
       if(kind==="hard"){const proof=hardEvidence(win,observed);if(proof)ready(proof);else schedule(0);return;}
-      if(!candidate){dirty=true;schedule(0);return;}
+      if(!candidate){dirty=true;schedule(20);return;}
       if(observed.transaction>=candidate.transaction&&observed.stamp>=candidate.at){
         if(routeEvidence(initial.frame,snapshotRoute(win,doc),win))ready({reason:"route-after-paint",transaction:observed.transaction},true);
         else{candidate=null;dirty=true;schedule(0);}

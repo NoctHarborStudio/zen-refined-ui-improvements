@@ -291,7 +291,10 @@ function install() {
   function syncDocument(s,time){
     if(active!==s||s.kind!=="hard")return;
     const g=s.browser.browsingContext?.currentWindowGlobal;
-    if(!newDocument(s,g))return;
+    if(!newDocument(s,g)){
+      if(s.firstPaint!==null&&documentId(g)!==documentId(s.global))startFallback(s,time,"document-changed");
+      return;
+    }
     if(documentId(s.global)!==documentId(g)){
       if(s.firstPaint!==null){startFallback(s,time,"redirect-during-reveal");return;}
       cancelWatch(s);s.global=g;s.documentCommitAt=time;s.evidence=null;
@@ -344,8 +347,8 @@ function install() {
       return;
     }
     s.drop.setAttribute("opacity","0");
-    // One radius drives all three clips. There is no conditional geometry
-    // or upper-progress ceiling while loading.
+    // The original circle geometry is shared by the old-frame cover and
+    // neutral shield. The live browser is never clipped or resized.
     const p=clamp(s.progress,0,1);
     const radius=lerp(23,Math.hypot(cx,cy)+12,ease(p));
     s.radius=radius;
@@ -375,6 +378,8 @@ function install() {
       else if(s.firstPaint===null&&time-s.watchAt>=250&&!s.unsupported)watchSoft(s);
       if(s.firstPaint!==null)planReveal(s,time);
       if(s.unsupported&&elapsed>=s.flightMs)startFallback(s,time,"unconfirmed-spa");
+      else if(s.firstPaint===null&&s.kind==="soft"&&elapsed>=Math.min(1800,s.timeout-140))startFallback(s,time,"unconfirmed-spa");
+      else if(s.firstPaint===null&&s.kind==="hard"&&s.networkStopAt!==null&&time-s.networkStopAt>=250&&elapsed>=s.flightMs)startFallback(s,time,"loaded-without-frame-proof");
       else if(s.firstPaint===null&&elapsed>=s.timeout-140)startFallback(s,time,"no-confirmed-frame");
     }
     if(s.fallbackAt!==null){
@@ -427,12 +432,12 @@ function install() {
     }
     const s=active;
     if(!s||s.browser!==b||data.token!==s.token||s.fallbackAt!==null)return;
-    if(documentId(global)!==documentId(b.browsingContext?.currentWindowGlobal))return;
+    if(!documentId(global)||documentId(global)!==documentId(b.browsingContext?.currentWindowGlobal))return;
     if(stripHash(data.uri)!==stripHash(s.uri))return;
     if(s.kind==="hard"){
       if(!newDocument(s,global))return;
       syncDocument(s,now());
-      if(documentId(s.global)!==documentId(global))return;
+      if(s.fallbackAt!==null||documentId(s.global)!==documentId(global))return;
     }else if(documentId(global)!==s.oldId||stripHash(data.oldURI)!==stripHash(s.oldURI))return;
     if(message.name==="PaintState"){
       s.paintState={suppressed:data.suppressed??null,fcp:!!data.fcp,pending:data.pending??null,transaction:data.transaction??null};
@@ -440,7 +445,7 @@ function install() {
     }
     if(message.name==="Unsupported"&&s.kind==="soft"){s.unsupported=true;trace(s,"spa-unconfirmed",{reason:data.reason});return;}
     if(message.name!=="FrameReady"||data.suppressed!==false)return;
-    const allowed=s.kind==="hard"?["contentful-composite","contentful-after-paint","contentful-drained"]:["route-after-paint"];
+    const allowed=s.kind==="hard"?["contentful-composite","contentful-after-paint","contentful-drained","visible-document-paint"]:["route-after-paint"];
     if(!allowed.includes(data.reason))return;
     if(s.kind==="soft"&&data.routeReplaced!==true)return;
     s.evidence={reason:data.reason,transaction:data.transaction??null};
@@ -465,8 +470,8 @@ function install() {
       } else if (flags & P.STATE_STOP) {
         scheduleWarm(250);
         if (active?.browser !== b || active.kind !== "hard") return;
-        // Network completion only triggers an early visual probe, not a
-        // declaration of readiness or a completion condition.
+        // Network stop never certifies a frame. It only bounds how long an
+        // unconfirmed animation may obscure an already-loaded native page.
         active.networkStopAt??=now();syncDocument(active,now());
       }
     },
@@ -481,7 +486,18 @@ function install() {
       if (same) {
         if (previous && stripHash(previous) === stripHash(uri)) return;
         if(active?.browser===b){
-          if(active.uri!==uri){active.uri=uri;if(active.kind==="soft"){if(active.firstPaint!==null)startFallback(active,now(),"route-changed-during-reveal");else{cancelWatch(active);active.evidence=null;active.unsupported=false;watchSoft(active);}}}
+          const st=active;
+          if(st.kind==="hard"&&st.firstPaint===null&&documentId(b.browsingContext?.currentWindowGlobal)===st.oldId){
+            if(!on("soft")){finish(st,"native-spa");return;}
+            cancelWatch(st);st.kind="soft";st.global=st.oldGlobal;st.uri=uri;st.committed=true;st.evidence=null;st.unsupported=false;st.networkStopAt=null;
+            trace(st,"classified-as-spa");watchSoft(st);
+          }else if(st.uri!==uri){
+            st.uri=uri;
+            if(st.kind==="soft"){
+              if(st.firstPaint!==null)startFallback(st,now(),"route-changed-during-reveal");
+              else{cancelWatch(st);st.evidence=null;st.unsupported=false;watchSoft(st);}
+            }
+          }
           return;
         }
         if(on("soft")){
@@ -491,7 +507,12 @@ function install() {
             scheduleWarm(350);
           }
         }
-      } else if (active?.browser === b && active.kind === "hard") {
+      } else if(active?.browser===b){
+        if(active.kind==="soft"){
+          if(active.firstPaint!==null){startFallback(active,now(),"document-changed-during-spa");return;}
+          cancelWatch(active);active.kind="hard";active.global=null;active.evidence=null;active.unsupported=false;active.networkStopAt=null;
+          trace(active,"classified-as-document");
+        }
         active.committed = true;
         active.commitAt=active.commitAt??now();
         active.uri=uri;

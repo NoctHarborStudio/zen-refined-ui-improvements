@@ -141,3 +141,6 @@ The deadline completion must interpolate across the reserved final interval, nev
 - [ ] A slow first frame keeps the aperture small, then performs a continuous reveal subject to the 800–4000 ms bounds. If unavailable, fade to native without a full-screen gray circle.
 - [ ] SPA: old paused or playing media and unrelated DOM changes cannot independently certify route replacement. Unconfirmed routes use native fallback. Actual SPA route semantics remain heuristic.
 - [ ] Runtime verification in Zen/WebRender is still required; the drained transaction queue is a weaker fallback than direct paint/composite evidence.
+
+- [ ] No-FCP pages may use a nonempty paint of the current document with visible content and a drained latest transaction. Unconfirmed finished loads fade to native after a short grace; ambiguous SPA routes are capped at 1.8 s before fallback.
+- [ ] Handle network-start then same-document commit, and same-document transition followed by a distinct document commit. Old readiness tokens cannot cross redirects.
