@@ -630,7 +630,7 @@ function install() {
   }
 
   function onPointerMove(event){
-    if(event.pointerType==="touch"||event.buttons||openPopups.size||!settings.enabled||dragging)return;
+    if(event.pointerType==="touch"||event.buttons||openPopups.size||!settings.enabled||dragging||root.hasAttribute("data-zr-startup-phase"))return;
     const item=event.target?.closest?.("toolbarbutton.bookmark-item");
     const moved=!lastPointer||event.clientX!==lastPointer.x||event.clientY!==lastPointer.y;
     lastPointer={x:event.clientX,y:event.clientY};
@@ -696,6 +696,7 @@ function install() {
     else clear(true);
   }
   function onFocus(event) {
+    if(root.hasAttribute("data-zr-startup-phase"))return;
     const item = event.target?.closest?.("toolbarbutton.bookmark-item");
     if (eligible(item) && item.matches(":focus-visible")) select(item, null);
   }

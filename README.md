@@ -21,9 +21,13 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, top-anch
 
 The optional startup module suppresses Gecko's early blank window and Windows pre-XUL skeleton using `browser.startup.blankWindow` and `browser.startup.preXulSkeletonUI`. It cannot suppress OS-level window animations or guarantee removal of every white flash. Normal browser exit keeps the setting for the next launch.
 
+## Center Assembly startup
+
+Optional one-shot browser-chrome startup reveal, enabled by default (760 ms). Real controls assemble from the center: address shell, tabs, bookmark row, then selected page/floating search. With OnePlane 0.2.0-preview.5 or later, a per-window readiness signal and temporary Compact Mode hold coordinate the two mods. Without OnePlane, native Zen's sidebar and toolbar are animated instead. Neither mod requires the other. The native page is never navigated, captured, or injected into. A bounded wait, input/resize cancellation, reduced-motion support and unload cleanup prevent a stuck screen. The reveal starts after native chrome/workspace initialization, not after every network page finishes. Update both mods before restarting to see the coordinated version.
+
 ## Planned improvements / known issues
 
-- **Startup animation:** the native browser currently appears in stages while its chrome and mods initialize. The placeholder-suppression option removes some early windows, but does not provide a coordinated startup animation. Planned: a polished, unified startup reveal after the browser chrome has initialized, without delaying actual startup or reintroducing a white flash. Investigate Gecko/Sine initialization order, reduced motion, and interaction with OS animations. Not implemented in this preview.
+- **Early startup:** Sine cannot intercept the native window before its scripts load. The center assembly is a browser-chrome reveal, not an OS window animation; late script loading or a slow initialization may fall back to normal startup.
 - **Bookmark text rendering:** animated transforms on text-bearing native nodes can cause blur or glyph shimmer in Gecko/WebRender. Preview.6 removed those transforms; preview.7 restores content enlargement using native font/icon sizes. Actual Windows rendering and performance remain to be validated.
 
 ## Install the preview in Sine

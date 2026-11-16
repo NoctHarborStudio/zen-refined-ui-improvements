@@ -84,5 +84,37 @@
     "property": "zen.refined.startup.disable-placeholders",
     "label": "Disable Firefox startup placeholder windows (restart required)",
     "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.startup.animation",
+    "label": "Center Assembly startup animation (next window)",
+    "defaultValue": true
+  },
+  {
+    "type": "dropdown",
+    "property": "zen.refined.startup.animation-duration",
+    "label": "Startup animation duration",
+    "value": "number",
+    "defaultValue": 760,
+    "placeholder": false,
+    "options": [
+      {
+        "label": "450 ms",
+        "value": 450
+      },
+      {
+        "label": "600 ms",
+        "value": 600
+      },
+      {
+        "label": "760 ms",
+        "value": 760
+      },
+      {
+        "label": "1000 ms",
+        "value": 1000
+      }
+    ]
   }
 ]

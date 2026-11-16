@@ -49,7 +49,7 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Verify stationary text and moving text during hover handoffs, at multiple Windows DPI settings. Native layout positioning can require main-thread paint, but no per-frame JS reads/writes, animated margin changes or native item resize.
 - [ ] Verify pseudo-element background hit-testing, native clicks/folder popup, stable OnePlane mask, and performance on real Zen. A pseudo-element animation unavailable on a given build falls back to a static card rather than transforming text.
 
-## Planned startup animation (not implemented)
+## Startup animation design (implemented in 0.5 preview)
 
 - [ ] Investigate browser-chrome initialization, staged UI appearance and a synchronized startup reveal. Preserve existing placeholder preference restoration and respect reduced motion. Do not add artificial startup latency.
 
@@ -65,3 +65,10 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Compare computed icon width/height and label font-size immediately before and after Animation.finished, including a conflicting theme !important width. No jump. Animation and settled geometry consume the same registered custom properties.
 - [ ] Short complete labels (DeepL, ChatGPT, Mail) never acquire ellipsis merely due to hover; intrinsically cropped long labels still obey native width limits. Check real XUL label metrics at several DPI settings.
 - [ ] Verify outgoing content, rapid reversals, existing inline styles and their original priorities restore on unlock, reduced motion, and no changes to neighbor transforms or background.
+
+## 0.5.0-preview.1 — Center Assembly
+
+- [ ] Both mods, cold start: ready handshake, address from center, horizontal tab fan, downward bookmark entry, page reveal; Compact Mode resumes normal behavior afterward.
+- [ ] Zen Refined alone: native sidebar/toolbar, no required OnePlane. OnePlane alone: unchanged normal startup. Old OnePlane: visible layout fallback or fail-open.
+- [ ] Slow or rejected native initialization, absent/missing controls, unload, resize, pointer/key/wheel input, disabled setting, reduced motion, multiple windows, hot reload: no retained overlay, hold, or animation effects.
+- [ ] Actual Zen/Sine cold-start timing, floating new-tab search/popover, restored sites, persistent and Compact Mode, narrow window, split groups and island mode. No page load waiting, no screenshot, no changes to session or browser preferences.
