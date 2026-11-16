@@ -307,7 +307,7 @@
     const actions=make("div","zr-dock-header-actions");
     allButton=action("All downloads","zr-dock-all",()=>openDock(true));
     clearButton=action("Clear","zr-dock-clear",()=>setConfirm(true));clearButton.disabled=true;clearButton.hidden=true;
-    const close=action("×","zr-dock-close",()=>closeDock(true));close.setAttribute("aria-label","Close downloads");
+    const close=action("×","zr-dock-close",()=>closeDock(true));close.setAttribute("aria-label","Close downloads");close.setAttribute("title","Close downloads");
     actions.append(allButton,clearButton,close);headerNormal.append(dockTitle,actions);
     yesButton=action("Yes","zr-dock-yes",()=>void clearHistory());
     noButton=action("No","zr-dock-no",()=>setConfirm(false,true));
@@ -325,7 +325,7 @@
     dock.append(header,dockSort,dockList,dockEmpty,dockMore,dockNotice);
     dock.addEventListener("click",e=>{if(cardOpen&&!e.target.closest?.("button")&&e.target.closest?.(".zr-dock-row,.zr-dock-title"))openDock(true);});
     dock.addEventListener("pointerenter",cancelHide);
-    dock.addEventListener("pointerleave",armHide);
+    dock.addEventListener("pointerleave",()=>armHide(true));
     root.append(dockBackdrop,dock);updateSort();
   }
   function updateSort(){
@@ -462,6 +462,7 @@
         await download.showContainingDirectory();
       }catch{showActionError("Could not open the containing folder.");}
     });
+    open.setAttribute("title","Open downloaded file");folder.setAttribute("title","Show in folder");
     body.append(name,meta,stats,track);actions.append(open,folder);el.append(glyph,body,actions);
     return {el,name,meta,stats,track,fill,open,folder};
   }
@@ -473,8 +474,8 @@
       historyOrder=[...history.keys()].reverse();
       historyOrder.sort((a,b)=>{
         const av=history.get(a),bv=history.get(b);
-        const active=Number(bv.active)-Number(av.active);if(active)return active;
         if(sortKey==="size"){
+          const active=Number(bv.active)-Number(av.active);if(active)return active;
           const x=sortBytes(av),y=sortBytes(bv);
           if(x===null||y===null){if(x!==y)return x===null?1:-1;}
           else if(x!==y)return sortDir*(x-y);
@@ -508,7 +509,8 @@
       if(row.name.textContent!==v.name)row.name.textContent=v.name;
       if(row.tooltipTime!==v.time||row.tooltipName!==v.name){
         row.tooltipTime=v.time;row.tooltipName=v.name;
-        row.name.setAttribute("title",v.name+(v.time?" — "+new Date(v.time).toLocaleString():""));
+        const description=v.name+(v.time?" — "+new Date(v.time).toLocaleString():"");
+        row.el.setAttribute("title",description);row.name.setAttribute("title",description);
       }
       if(row.meta.textContent!==text)row.meta.textContent=text;
       row.el.setAttribute("data-state",v.active?"active":v.success?"complete":v.failed?"failed":"stopped");
@@ -529,11 +531,11 @@
     }
   }
   function cancelHide(){if(hideTimer)window.clearTimeout(hideTimer);hideTimer=0;}
-  function armHide(){
+  function armHide(pointerLeft=false){
     cancelHide();
     // Pointer alone controls the recent timeout; button focus must not
     // keep it alive after the mouse leaves. Full mode never auto-dismisses.
-    if(!cardOpen||entering||dock?.matches(":hover"))return;
+    if(!cardOpen||entering||(!pointerLeft&&dock?.matches(":hover")))return;
     hideTimer=window.setTimeout(()=>{hideTimer=0;if(cardOpen&&!dock.matches(":hover"))closeDock();},HOLD);
   }
   function onKey(e){if(e.key==="Escape"){if(dockOpen&&confirming&&!clearing)setConfirm(false,true);else if(dockOpen||cardOpen)closeDock(true);}}
