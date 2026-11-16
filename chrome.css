@@ -291,6 +291,22 @@
 #zr-download-dock[data-open] { opacity:1;visibility:visible;pointer-events:auto; }
 #zr-download-dock[data-entering] { pointer-events:none; }
 #zr-download-dock[data-closing] { opacity:1;visibility:visible;pointer-events:none; }
+/* Real painted bridge, not an out-of-bounds clip of the resting box.
+   Extra padding preserves the content width; the left variant offsets
+   its border box so the resting content coordinates never move. */
+#zr-download-dock:is([data-entering],[data-closing]) {
+  width:calc(var(--zr-overlay-width,430px) + var(--zr-wave-extension,32px));
+  border-color:transparent;
+  box-shadow:none;
+  overflow:visible;
+}
+#zr-download-dock:is([data-entering],[data-closing])[data-side="right"] {
+  padding-right:calc(12px + var(--zr-wave-extension,32px));
+}
+#zr-download-dock:is([data-entering],[data-closing])[data-side="left"] {
+  padding-left:calc(12px + var(--zr-wave-extension,32px));
+  translate:calc(var(--zr-overlay-x,6px) - var(--zr-wave-extension,32px)) var(--zr-overlay-y,8px);
+}
 #zr-download-dock[data-entering] > * { animation:zr-panel-content-in 780ms linear both; }
 #zr-download-dock[data-closing] > * { animation:zr-panel-content-in 780ms linear reverse both; }
 @keyframes zr-panel-content-in { 0%,42% { opacity:0; } 88%,100% { opacity:1; } }
@@ -340,7 +356,10 @@
 /* A translucent native-painted surface, without fading its text or controls. */
 #zr-download-dock { background:transparent;isolation:isolate; }
 #zr-download-dock::before { content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--zr-download-surface);opacity:.88;pointer-events:none; }
-#zr-download-dock[data-open] { backdrop-filter:blur(12px); }
+#zr-download-dock:is([data-entering],[data-closing])::before {
+  inset:-1px;border-radius:0;
+}
+#zr-download-dock:is([data-open],[data-closing]) { backdrop-filter:blur(12px); }
 @media(prefers-reduced-motion:reduce) { #zr-download-dock > * { transition:none !important; } }
 
 /* One panel, only its internal list scrolls. */

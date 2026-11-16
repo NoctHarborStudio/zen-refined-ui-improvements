@@ -139,3 +139,8 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Cold start and new browser window with Windows Mica/acrylic, Windhawk on/off, Zen alone and OnePlane: no opaque overlay or change to native backdrop; page stays visible. Late Sine load skips animation rather than hiding already painted controls.
 - [ ] Interrupt during waiting, active motion and settling (click, key, resize, timeout, disable, unload). No window-wide flash, no retained effects or hold. Normal reduced-motion bypass and native controls remain usable.
 - [ ] Confirm startup placeholder preferences, Downloads, Page Progress and Center Disassembly remain unchanged.
+
+## 0.6.0-preview.16 — edge-connected Downloads wave
+
+- [ ] Native right/left sidebar, shown/hidden Compact Mode, manual and automatic entry: first visible motion emerges as a growing point at the boundary, no floating strip or square cut-off gap. Close reverses to the same point.
+- [ ] Full/recent modes, sidebar moving during entry, interruption, reduced motion, OnePlane host/fallback, narrow widths and light/dark theme: unchanged resting geometry, correct mask and user-origin hold. Confirm real Gecko painting outside the resting dock box.

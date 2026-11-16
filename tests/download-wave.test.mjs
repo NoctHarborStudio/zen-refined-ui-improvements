@@ -5,16 +5,16 @@ const source=readFileSync(new URL("../downloads-indicator.uc.mjs",import.meta.ur
 function section(a,b){return source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)+a.length));}
 const geometry=new Function("r","w","h","x","y",`const clamp=(v,lo,hi)=>Math.max(lo,Math.min(Math.max(lo,hi),v));${section("function wavePath(","function updateOverlayMask(")}return {g:panelGeometry(r,w,h,x,y),reverseWave};`);
 test("wave stays connected, expands diagonally, and mirrors",()=>{
- const a=geometry({side:"right",x:800,y:31,seedW:19,seedH:19},430,380,330,12).g;
- const b=geometry({side:"left",x:35,y:31,seedW:19,seedH:19},430,380,75,12).g;
- assert.equal(a.frames.length,9);assert.equal(a.frames[0].opacity,0);
+ const a=geometry({side:"right",edge:768,x:800,y:31},430,380,330,12).g;
+ const b=geometry({side:"left",edge:67,x:35,y:31},430,380,75,12).g;
+ assert.equal(a.frames.length,11);assert.equal(a.frames[0].opacity,0);
  for(let i=0;i<a.frames.length;i++){
    const parse=f=>[...f.clipPath.matchAll(/-?\d+\.\d+/g)].map(m=>Number(m[0]));
    const x=parse(a.frames[i]),y=parse(b.frames[i]);assert.equal(x.length,y.length);
-   for(let k=0;k<x.length;k++)assert.ok(Math.abs((k%2?x[k]-y[k]:x[k]+y[k]-430))<.002);
+   for(let k=0;k<x.length;k++)assert.ok(Math.abs((k%2?x[k]-y[k]:x[k]+y[k]-a.extent))<.002);
  }
  assert.equal(a.frames.at(-1).transform,"translate(0px,0px)");
- assert.ok(a.frames[4].clipPath.includes("0.000"));
+ assert.ok(a.frames[5].clipPath.includes("0.000"));
 });
 test("close exactly reverses opening keyframes",()=>{
  const {g,reverseWave}=geometry({side:"right",x:800,y:31},430,380,330,12);
@@ -42,10 +42,19 @@ test("sidebar mask is mirrored and absent for a hosted indicator",()=>{
  updateOverlayMask({side:"right",edge:850});const right={...values};updateOverlayMask({side:"left",edge:150});const left={...values};native=false;updateOverlayMask({side:"left",edge:150});return {right,left,hosted:values};`);
  assert.deepEqual(run(),{right:{"--zr-mask-left":"0px","--zr-mask-right":"150px"},left:{"--zr-mask-left":"150px","--zr-mask-right":"0px"},hosted:{"--zr-mask-left":"0px","--zr-mask-right":"0px"}});
 });
-test("first visible seed is a circle, before growth",()=>{
- const {g}=geometry({side:"right",x:800,y:31,seedW:19,seedH:19},430,380,330,12);
- assert.equal(g.frames[0].clipPath,g.frames[1].clipPath);
+test("first seed is a subpixel circle at the sidebar boundary and grows continuously",()=>{
+ const {g}=geometry({side:"right",edge:768,x:800,y:31},430,380,330,12);
+ const points=f=>[...f.clipPath.matchAll(/-?\d+\.\d+/g)].map(m=>Number(m[0]));
+ const box=f=>{const p=points(f),xs=p.filter((_,i)=>i%2===0),ys=p.filter((_,i)=>i%2===1);return {l:Math.min(...xs),r:Math.max(...xs),t:Math.min(...ys),b:Math.max(...ys)};};
+ const a=box(g.frames[0]),b=box(g.frames[1]),c=box(g.frames[2]);
+ assert.ok(a.r-a.l<1);assert.ok(Math.abs((a.l+a.r)/2-g.anchor)<.002);
+ assert.ok(Math.abs((a.r-a.l)-(a.b-a.t))<.002);
+ assert.ok(b.r-b.l>a.r-a.l&&c.r-c.l>b.r-b.l);
  assert.equal(g.frames[1].opacity,1);
+ for(const f of g.frames.slice(3,-1)){const v=box(f);assert.ok(v.l<g.anchor&&v.r>g.anchor);}
+ assert.equal(box(g.frames.at(-1)).r,430);
+ assert.equal(g.extent,462);
+ assert.equal(g.anchor,438);
 });
 
 test("pinning from a download row does not acquire the sidebar",()=>{

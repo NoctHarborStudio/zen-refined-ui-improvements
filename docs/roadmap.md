@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.6.0-preview.15`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.16`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -20,10 +20,14 @@ Baseline: `0.6.0-preview.15`. Zen Refined owns general browser UI improvements. 
 
 - Center Disassembly: reverse startup assembly, 520ms, native close command remains authoritative.
 
-## In development — 0.6.0-preview.15
+## Open validation / deferred — 0.6.0-preview.15
 
-- Center Assembly transparency: no full-window or page covers, first-paint gate, smooth interruption. Verify actual Windows cold start with and without Windhawk.
+- Center Assembly transparency: no full-window or page covers, first-paint gate, smooth interruption. The intermittent window flash remains; investigation deferred by user.
 - Optional OnePlane Extension Dock integration remains future work.
+
+## Preview.16 — Downloads wave refinement
+
+Grow from a subpixel point at the inner sidebar boundary, keep a real painted bridge during diagonal fill, and retract along the same path. Resting spacing and source-aware hold remain unchanged. Real Zen visual validation pending.
 
 ## Backlog
 
@@ -32,9 +36,11 @@ Baseline: `0.6.0-preview.15`. Zen Refined owns general browser UI improvements. 
 1. **Smart Compact Mode.** Improve intentional edge-hover activation, especially crossing between monitors, without replacing Zen's existing Compact Mode. First audit native `zen.view.compact.hover-hack-delay`, `zen.view.compact.sidebar-keep-hover.duration`, `zen.view.compact.toolbar-hide-after-hover.duration` and outside-window tracking; reuse native delay preferences rather than duplicate them. Prototype direction/dwell or velocity-based filtering only if needed. Respect left/right placement, multiple monitors, DPI, window snapping, fullscreen, dragging, keyboard toggles, native popup/Library holds and the accepted source-aware Downloads hold. Work standalone; coordinate with OnePlane's own hover engine when active, with no duplicate controller.
 2. **Smart Context Menu.** Optional compact organization of native tab context actions, with useful icons, logical groups, rare commands in submenus and configurable visibility. Audit existing Zen 1.24.2b menus first (Zen has already simplified the sidebar context menu). Retain native command IDs/handlers, dynamic enablement, localization, keyboard access, multiselect, pinned/essential/folder/split and extension entries. No removal of security-relevant commands, confirmation bypass or cloned destructive operations. OnePlane's mirrored tabs already open native context menus; integrate through that existing path. Prototype before implementation.
 
+3. **Smart Search — recent active tabs (approved).** Add an optional MRU section to the native empty address-bar / Ctrl+T view, using existing open tab identities and last activation time rather than browsing-history ranking. Prefer the current workspace; show actual workspace/container identity and use native tab switching, not duplicate navigation. Integrate with OnePlane's horizontal tab UI without creating a second data store or provider. Preserve existing typed results, shortcuts, folders, actions, keyboard navigation, private-window isolation and native ranking outside the empty-query section. Prototype ordering and presentation before implementation.
+
 ### Candidate review — avoid duplicating native Zen 1.24.2b
 
-- **Smart Search:** partially native. Empty URL bar already shows suggestions and Switch to Tab (observed in user screenshot); native September command bar update supports tab/folder search and actions. A distinct recent-active-tabs (MRU) section for empty Ctrl+T, current-space preference and explicit workspace/container identity could still be useful; the native Zen sidebar provider requires query tokens and filters to current space/Essentials, not a dedicated empty-query MRU list. Do not replace native suggestions or implement now without approval. [Original request](https://github.com/zen-browser/desktop/discussions/14086).
+- **Smart Search:** partially native. Empty URL bar already shows suggestions and Switch to Tab (observed in user screenshot); native September command bar update supports tab/folder search and actions. A distinct recent-active-tabs (MRU) section for empty Ctrl+T, current-space preference and explicit workspace/container identity could still be useful; the native Zen sidebar provider requires query tokens and filters to current space/Essentials, not a dedicated empty-query MRU list. Approved as the targeted recent-active-tabs improvement above; not implemented yet. [Original request](https://github.com/zen-browser/desktop/discussions/14086).
 - **History Dock:** do not implement as a separate feature now. Native Library introduced in 1.23b, closed-tab filter in 1.23.1b. In 1.24.2b its history section already opens a visit in a new tab, with accelerator/middle-click background support, search, date/site sorting and closed-tab restore. Legacy history menus may still differ; only revisit a reproducible remaining problem or an explicitly requested visual integration. [Native history source](https://github.com/zen-browser/desktop/blob/1.24.2b/src/zen/library/sections/ZenLibraryHistorySection.mjs).
 - **Semi-Compact Mode:** native collapsed toolbar is present; automatic expand-on-hover is a distinct optional feature and existing Zen Mods offer it. Keep as unapproved low-priority candidate; audit compatibility with new Library and actual user need before implementing, possibly as an extension of Smart Compact Mode. [Discussion](https://github.com/zen-browser/desktop/discussions/9075).
 - **Visual Consistency:** existing general UI backlog, not a new blanket rewrite. Native releases already fixed several transparency, theme and Glance issues. Only address reproducible mismatches on current Zen with theme/OS-specific evidence.

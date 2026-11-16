@@ -18,3 +18,7 @@
 
 - Real Zen visual test: verify native anchor selection, sidebar hide/show, mirroring, theme colors, long filenames, flight landing, card clearance and timing. Profile if needed.
 - OnePlane Extension Dock supplies host later; native Library's other sections remain unchanged; the custom Downloads Dock replaces only its download entry path.
+
+### Preview.16 — edge-connected wave
+
+The animated dock has a 32px extension toward the source and matching padding to preserve the content coordinates. The path starts at the measured inner sidebar edge as a subpixel point, grows through circular seeds into a connected strip, fills diagonally, and retracts the bridge only at the end of the reveal. Native clipping masks the part behind the sidebar. The resting box retains its 8px gap. Close reverses these keyframes. Source-aware sidebar hold and notification timeout are unchanged.

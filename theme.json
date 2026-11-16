@@ -1,10 +1,10 @@
 {
   "id": "9d788b55-d497-41da-8444-993c603e89e4",
   "name": "Zen Refined — UI Improvements",
-  "description": "Modular UI improvements for Zen: Magnetic Bookmarks, Center Assembly, download and page loading indicators.",
+  "description": "Modular Zen Browser enhancements: Magnetic Bookmarks, fluid Downloads Dock, Page Progress, Center Assembly & Disassembly, and startup appearance controls. Standalone or with OnePlane.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.6.0-preview.15",
+  "version": "0.6.0-preview.16",
   "style": {
     "chrome": "chrome.css"
   },
@@ -13,10 +13,12 @@
   "tags": [
     "bookmarks",
     "toolbar",
-    "animation"
+    "animation",
+    "downloads",
+    "productivity"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-16T17:01:54.000Z",
+  "updatedAt": "2026-11-16T17:24:52.000Z",
   "fork": [
     "zen"
   ],

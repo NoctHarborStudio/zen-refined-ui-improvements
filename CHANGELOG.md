@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0-preview.16
+
+- Downloads wave now starts from a subpixel dot at the sidebar boundary, growing into a narrow connected stream. Its animated border box spans the gap; the outer mask no longer clips away an unpainted bridge. Closing reverses the same geometry, and the final resting gap is preserved.
+- Smart Search (recent active tabs) approved in roadmap alongside Smart Compact Mode and Smart Context Menu. No implementation of these planned features in this release.
+- Refresh project documentation and Sine description with current functionality and known limitations.
+
 ## 0.6.0-preview.15
 
 - Remove both opaque startup veils and keep native page, window background and sidebar material visible. Animate individual chrome controls only.

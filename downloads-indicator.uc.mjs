@@ -146,10 +146,10 @@
   }
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(Math.max(lo,hi),v));
   function setVar(n,k,v){if(n.style.getPropertyValue(k)!==v)n.style.setProperty(k,v);}
-  function wavePath(width,height,side,span,topL,topR,bottomL,bottomR,rL,rR){
+  function wavePath(width,side,l,r,topL,topR,bottomL,bottomR,rL,rR){
     // The approved demo's asymmetric cubic contour. All frames have
     // identical commands, so Gecko interpolates paths without JS ticks.
-    const l=width-span,r=width,w=span,tl=topL,tr=topR,bl=bottomL,br=bottomR;
+    const w=r-l,tl=topL,tr=topR,bl=bottomL,br=bottomR;
     const rl=Math.min(rL,w/2,Math.max(0,bl-tl)/2),rr=Math.min(rR,w/2,Math.max(0,br-tr)/2),k=.55228475;
     const point=(x,y)=>`${(side==="right"?x:width-x).toFixed(3)} ${y.toFixed(3)}`;
     const M=(x,y)=>"M "+point(x,y),C=(...p)=>"C "+point(p[0],p[1])+" "+point(p[2],p[3])+" "+point(p[4],p[5]);
@@ -169,31 +169,41 @@
     ].join(" ");
     return `path("${d}")`;
   }
+  const WAVE_EXTENSION=32;
   function panelGeometry(r,width,height,x,y){
-    const sw=Math.min(19,r.seedW||19,width),sh=Math.min(19,r.seedH||19,height);
-    const sy=clamp(r.y-y-sh/2,0,height-sh),seedBottom=sy+sh;
-    const sourceX=r.side==="right"?x+width-sw/2:x+sw/2;
-    const dx=r.x-sourceX,dy=r.y-y-sy-sh/2;
+    // The animated border box really includes the bridge to the sidebar.
+    // Coordinates are measured from the far edge of the resting panel.
+    // No translating a clipped rectangle through the gap.
+    const extent=width+WAVE_EXTENSION;
+    const edge=Number.isFinite(r.edge)?r.edge:r.x;
+    const anchor=clamp(r.side==="right"?edge-x:x+width-edge,0,extent-13);
+    const cy=clamp(r.y-y,1,Math.max(1,height-1));
+    const strip=Math.min(12,cy,Math.max(0,height-cy));
+    const bridge=Math.min(extent,anchor+12);
     const at="translate(0px,0px)",full="inset(0px 0px 0px 0px round 12px)";
-    // Width, leading/trailing heights and source displacement follow
-    // the approved demo: narrow connected stream, then diagonal fill.
-    const seedRadius=Math.min(sw,sh)/2;
+    const dot=(p,rad,opacity)=>{
+      const radius=Math.min(rad,cy,Math.max(.001,height-cy),Math.max(.001,extent-anchor));
+      return [p,anchor-radius,anchor+radius,cy-radius,cy-radius,cy+radius,cy+radius,radius,radius,opacity];
+    };
+    const reach=(fraction)=>anchor*(1-fraction);
     const points=[
-      [0,sw,sy,sy,seedBottom,seedBottom,seedRadius,seedRadius,1,1,0],
-      [.07,sw,sy,sy,seedBottom,seedBottom,seedRadius,seedRadius,1,1,1],
-      [.12,Math.max(sw,width*.18),sy,sy,seedBottom,seedBottom,seedRadius,seedRadius,1,1,1],
-      [.27,Math.max(sw,width*.66),sy*.5,sy,seedBottom,seedBottom,12,7,.78,.8,1],
-      [.40,width,0,sy,Math.max(seedBottom,height*.10),seedBottom,12,7,.64,.6,1],
-      [.53,width,0,sy*.5,Math.max(seedBottom,height*.365),Math.max(seedBottom,height*.10),12,9,.30,.3,1],
-      [.70,width,0,0,Math.max(seedBottom,height*.80),Math.max(seedBottom,height*.288),12,12,.06,.06,1],
-      [.85,width,0,0,height,Math.max(seedBottom,height*.706),12,12,0,0,1],
-      [1,width,0,0,height,height,12,12,0,0,1]
+      dot(0,.35,0),
+      dot(.045,1.7,1),
+      dot(.095,Math.min(6,strip),1),
+      [.18,reach(.22),bridge,cy-strip,cy-strip,cy+strip,cy+strip,strip,strip,1],
+      [.30,reach(.67),bridge,Math.max(0,cy-strip*1.3),cy-strip,cy+strip,cy+strip,strip,strip,1],
+      [.42,0,bridge,0,cy-strip,Math.max(cy+strip,height*.10),cy+strip,12,strip,1],
+      [.55,0,bridge,0,Math.max(0,cy-strip)*.5,Math.max(cy+strip,height*.365),Math.max(cy+strip,height*.10),12,12,1],
+      [.72,0,bridge,0,0,Math.max(cy+strip,height*.80),Math.max(cy+strip,height*.288),12,12,1],
+      [.87,0,bridge,0,0,height,Math.max(cy+strip,height*.78),12,12,1],
+      [.94,0,bridge,0,0,height,height,12,12,1],
+      [1,0,width,0,0,height,height,12,12,1]
     ];
-    const frames=points.map(([offset,span,tl,tr,bl,br,rl,rr,tx,ty,opacity])=>({
-      offset,clipPath:wavePath(width,height,r.side,span,tl,tr,Math.min(height,bl),Math.min(height,br),rl,rr),
-      transform:`translate(${dx*tx}px,${dy*ty}px)`,opacity,easing:"cubic-bezier(.42,0,.58,1)"
+    const frames=points.map(([offset,l,rightEdge,tl,tr,bl,br,rl,rr,opacity])=>({
+      offset,clipPath:wavePath(extent,r.side,l,rightEdge,tl,tr,Math.min(height,bl),Math.min(height,br),rl,rr),
+      transform:at,opacity,easing:"cubic-bezier(.42,0,.58,1)"
     }));
-    return {frames,at,full,x,y,width,height};
+    return {frames,at,full,x,y,width,height,extent,anchor,bridge};
   }
   function reverseWave(frames,progress=1){
     // Reverse the exact same contour and displacement, not a different
@@ -219,6 +229,7 @@
     const r=dockRect(following),w=window.innerWidth,h=window.innerHeight,right=r.side==="right";
     updateOverlayMask(r);
     const width=Math.min(OVERLAY_WIDTH,Math.max(1,w-12));
+    setVar(dock,"--zr-wave-extension",WAVE_EXTENSION+"px");
     const x=clamp(right?r.edge-width-8:r.edge+8,6,w-width-6);
     // Both modes share the same top and x. Full mode fills the remaining
     // viewport, including the real bottom margin, with an inner scroll area.
