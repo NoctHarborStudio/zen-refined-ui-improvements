@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0-preview.7
+
+- Resolve download reveal from the real sidebar icon; mirror it on either side and morph the dock from the detail card using matching geometry.
+- Expand the dock, reserve scrollbar space and use a translucent native-painted surface.
+- Add explicit native Open action for completed downloads and optional average speed / elapsed time for downloads observed in this session (on by default).
+
 ## 0.6.0-preview.3
 
 - Make Magnetic Bookmarks a shared window-scoped controller with independent leases for Zen Refined and OnePlane. Retain existing settings and native hover animation.

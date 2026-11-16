@@ -137,6 +137,12 @@
   },
   {
     "type": "checkbox",
+    "property": "zen.refined.downloads.statistics",
+    "label": "Show average download speed and elapsed time",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
     "property": "zen.refined.page-progress.enabled",
     "label": "Page loading indicator",
     "defaultValue": true

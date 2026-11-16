@@ -227,7 +227,7 @@
   translate:var(--zr-overlay-x,6px) var(--zr-overlay-y,70px);
   z-index:2147483000 !important;
   display:flex !important;
-  width:var(--zr-overlay-width,264px);
+  width:var(--zr-overlay-width,310px);
   align-items:center;
   gap:12px;
   padding:12px 13px;
@@ -241,11 +241,11 @@
   visibility:hidden;
   pointer-events:none;
   transform-origin:left center;
-  transform:translateX(-9px);
-  clip-path:inset(39% 94% 39% 0 round 14px);
+  transform:translate(var(--zr-seed-dx,0px),var(--zr-seed-dy,0px));
+  clip-path:var(--zr-seed-clip,inset(39% 94% 39% 0 round 14px));
   transition:clip-path 500ms cubic-bezier(.42,0,.3,1),transform 500ms cubic-bezier(.32,0,.25,1),opacity 460ms ease,visibility 500ms;
 }
-#zr-download-card[data-side="right"] { transform-origin:right center;transform:translateX(9px);clip-path:inset(39% 0 39% 94% round 14px); }
+#zr-download-card[data-side="right"] { transform-origin:right center; }
 #zr-download-card[data-open] {
   opacity:1;visibility:visible;pointer-events:auto;transform:none;
   clip-path:inset(-22px -22px -22px -22px round 22px);
@@ -317,8 +317,8 @@
   translate:var(--zr-overlay-x,6px) var(--zr-overlay-y,70px);
   z-index:2147483002 !important;
   display:flex !important;flex-direction:column;
-  width:var(--zr-overlay-width,344px);
-  max-height:min(460px,calc(100vh - 16px));
+  width:var(--zr-overlay-width,430px);
+  max-height:min(500px,calc(100vh - 16px));
   padding:12px;
   gap:10px;
   border:1px solid var(--zr-download-outline);
@@ -327,11 +327,15 @@
   box-shadow:0 8px 28px #0004;
   opacity:0;visibility:hidden;pointer-events:none;
   transform-origin:left center;
-  transform:translateX(-20px);
-  transition:transform 500ms cubic-bezier(.22,.65,.18,1),opacity 360ms ease,visibility 500ms;
+  transform:translate(var(--zr-seed-dx,0px),var(--zr-seed-dy,0px));
+  clip-path:var(--zr-seed-clip,inset(40% 80% 40% 0 round 11px));
+  transition:clip-path 650ms cubic-bezier(.4,0,.18,1),transform 650ms cubic-bezier(.32,0,.25,1),opacity 650ms ease,visibility 650ms;
 }
-#zr-download-dock[data-side="right"] { transform-origin:right center;transform:translateX(20px); }
-#zr-download-dock[data-open] { opacity:1;visibility:visible;pointer-events:auto;transform:none; }
+#zr-download-dock[data-side="right"] { transform-origin:right center; }
+#zr-download-dock[data-open] { opacity:1;visibility:visible;pointer-events:auto;transform:none;clip-path:inset(-22px -22px -22px -22px round 22px);transition:clip-path 780ms cubic-bezier(.4,0,.18,1),transform 780ms cubic-bezier(.32,0,.25,1),opacity 260ms ease,visibility 0s; }
+#zr-download-card[data-handoff] { opacity:0;visibility:hidden;transition:none !important; }
+#zr-download-dock > :is(.zr-dock-header,.zr-dock-sort,.zr-dock-list,.zr-dock-empty,.zr-dock-more,.zr-dock-notice) { opacity:0;transition:opacity 180ms ease; }
+#zr-download-dock[data-open] > :is(.zr-dock-header,.zr-dock-sort,.zr-dock-list,.zr-dock-empty,.zr-dock-more,.zr-dock-notice) { opacity:1;transition:opacity 440ms ease 160ms; }
 #zr-download-dock .zr-dock-header { display:flex;align-items:center;justify-content:space-between;padding:2px 2px 8px;border-bottom:1px solid color-mix(in srgb,currentColor 10%,transparent); }
 #zr-download-dock .zr-dock-title { font-size:14px;font-weight:600; }
 #zr-download-dock button { appearance:none;color:inherit;font:inherit;cursor:pointer;border:0;background:color-mix(in srgb,currentColor 7%,transparent);border-radius:6px;padding:7px; }
@@ -339,12 +343,16 @@
 #zr-download-dock button:focus-visible { outline:2px solid currentColor;outline-offset:2px; }
 #zr-download-dock button:disabled { opacity:.35;cursor:default; }
 #zr-download-dock .zr-dock-close { width:27px;height:27px;padding:0;font-size:20px;line-height:1; }
-#zr-download-dock .zr-dock-list { display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;scrollbar-width:thin; }
-#zr-download-dock .zr-dock-row { display:flex;align-items:center;gap:9px;padding:9px 8px;border-radius:8px;background:var(--zr-download-row); }
+#zr-download-dock .zr-dock-list { display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-gutter:stable;padding-inline-end:9px; }
+#zr-download-dock .zr-dock-row { display:flex;align-items:center;gap:9px;padding:10px 9px;border-radius:8px;background:color-mix(in srgb,var(--zr-download-row) 75%,transparent);flex-shrink:0; }
 #zr-download-dock .zr-dock-row-body { flex:1;min-width:0;display:flex;flex-direction:column;gap:5px; }
 #zr-download-dock .zr-dock-name { font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
 #zr-download-dock .zr-dock-meta { font-size:10px;opacity:.7;white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
-#zr-download-dock .zr-dock-folder { font-size:10px;white-space:nowrap;flex:0 0 auto; }
+#zr-download-dock .zr-dock-row-actions { display:flex;gap:5px;align-items:center;justify-content:flex-end;flex:0 0 auto; }
+#zr-download-dock :is(.zr-dock-folder,.zr-dock-open-file) { font-size:10px;white-space:nowrap;flex:0 0 auto; }
+#zr-download-dock .zr-dock-stats { font-size:9px;opacity:.62;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-variant-numeric:tabular-nums; }
+#zr-download-dock .zr-dock-open-file { background:color-mix(in srgb,currentColor 13%,transparent); }
+@media(max-width:460px) { #zr-download-dock .zr-dock-row-actions { flex-direction:column;align-items:stretch; } }
 #zr-download-dock .zr-dock-row:not([data-state="active"]) .zr-download-track { display:none; }
 #zr-download-dock .zr-dock-row[data-indeterminate] .zr-download-fill { width:42%;animation:zr-download-unknown 1.45s ease-in-out infinite; }
 #zr-download-dock .zr-dock-empty { text-align:center;opacity:.65;padding:28px 8px; }
@@ -369,3 +377,9 @@
 @media(prefers-reduced-motion:reduce) {
   #zr-download-card :is(.zr-download-body,.zr-download-icon),#zr-download-dock .zr-dock-header-confirm { transition:none !important;animation:none !important; }
 }
+
+/* A translucent native-painted surface, without fading its text or controls. */
+:is(#zr-download-card,#zr-download-dock) { background:transparent;isolation:isolate; }
+:is(#zr-download-card,#zr-download-dock)::before { content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--zr-download-surface);opacity:.88;pointer-events:none; }
+:is(#zr-download-card,#zr-download-dock)[data-open] { backdrop-filter:blur(12px); }
+@media(prefers-reduced-motion:reduce) { #zr-download-dock > * { transition:none !important; } }
