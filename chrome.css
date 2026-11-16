@@ -22,7 +22,6 @@
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item {
   align-self: flex-start !important;
-  flex-shrink: 0 !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
   overflow: visible !important;
@@ -36,6 +35,9 @@
   left: 0;
   top: 0;
   /* Never force a transformed layer for a text-bearing bookmark. */
+  transform: none !important;
+  scale: none !important;
+  translate: none !important;
   transition: none !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
@@ -49,6 +51,12 @@
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-active] {
   z-index: 3;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > :is([data-zr-bm-flip], [data-zr-bm-card]) :is(.toolbarbutton-icon, .toolbarbutton-text) {
+  transform: none !important;
+  scale: none !important;
+  translate: none !important;
+  transition: none !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card]::before {
   content: "";

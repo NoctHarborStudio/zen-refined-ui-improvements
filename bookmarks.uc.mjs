@@ -267,7 +267,7 @@ function install() {
     const p=cards.get(node);if(!p)return restingCard;
     // Read the actual animation progress on retarget, not computed style
     // on every frame. No native label is transformed at any point.
-    let t=1;
+    let t=p.animation&&p.animation.playState!=="finished"?0:1;
     try{const progress=p.animation?.effect?.getComputedTiming().progress;
       if(typeof progress==="number")t=clamp(progress,0,1);
     }catch{}
