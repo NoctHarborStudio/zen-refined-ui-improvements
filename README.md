@@ -2,7 +2,7 @@
 
 A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
-**Current development preview: `0.6.0-preview.17`** · Target: Zen 1.24.2b / Sine 2.3.3.
+**Current development preview: `0.6.0-preview.18`** · Target: Zen 1.24.2b / Sine 2.3.3.
 
 > Preview software. Core features have been tested by the maintainer/user in Zen; compatibility across operating systems, themes and configurations is not guaranteed. Install in a test profile first.
 
@@ -12,7 +12,7 @@ A modular collection of visual and usability enhancements for [Zen Browser](http
 | --- | --- | --- |
 | **Magnetic Bookmarks** | Native bookmark magnification, smooth neighbor movement, downward expansion and spring-based liquid indicator. | User-tested |
 | **Downloads Dock** | Native sidebar indicator, flight notification, edge-connected fluid reveal, recent and full downloads, live transfer data and native file actions. | Core accepted; latest wave refinement pending visual validation |
-| **Smart Search** | Recently active tabs in the empty native address bar, current workspace first, exact tab switching. | First preview; live validation pending |
+| **Smart Search** | Recently active tabs in the empty native address bar, current workspace first, exact tab switching. | Registration fix; live validation pending |
 | **Page Progress** | Symmetric, center-out page-loading line without percentages. | User-tested |
 | **Center Assembly** | One-shot startup assembly of tabs, address bar, bookmarks and controls without an opaque window cover. | Implemented; startup flash / FPS follow-up deferred |
 | **Center Disassembly** | 520 ms reverse animation on the native close-window command. | User-tested |
