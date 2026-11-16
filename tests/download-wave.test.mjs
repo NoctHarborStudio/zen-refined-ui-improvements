@@ -1,0 +1,36 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const source=readFileSync(new URL("../downloads-indicator.uc.mjs",import.meta.url),"utf8");
+function section(a,b){return source.slice(source.indexOf(a),source.indexOf(b,source.indexOf(a)+a.length));}
+const geometry=new Function("r","w","h","x","y",`const clamp=(v,lo,hi)=>Math.max(lo,Math.min(Math.max(lo,hi),v));${section("function wavePath(","function positionOverlays(")}return {g:panelGeometry(r,w,h,x,y),reverseWave};`);
+test("wave stays connected, expands diagonally, and mirrors",()=>{
+ const a=geometry({side:"right",x:800,y:31,seedW:19,seedH:19},430,380,330,12).g;
+ const b=geometry({side:"left",x:35,y:31,seedW:19,seedH:19},430,380,75,12).g;
+ assert.equal(a.frames.length,8);assert.equal(a.frames[0].opacity,0);
+ for(let i=0;i<a.frames.length;i++){
+   const parse=f=>[...f.clipPath.matchAll(/-?\d+\.\d+/g)].map(m=>Number(m[0]));
+   const x=parse(a.frames[i]),y=parse(b.frames[i]);assert.equal(x.length,y.length);
+   for(let k=0;k<x.length;k++)assert.ok(Math.abs((k%2?x[k]-y[k]:x[k]+y[k]-430))<.002);
+ }
+ assert.equal(a.frames.at(-1).transform,"translate(0px,0px)");
+ assert.ok(a.frames[3].clipPath.includes("0.000"));
+});
+test("close exactly reverses opening keyframes",()=>{
+ const {g,reverseWave}=geometry({side:"right",x:800,y:31},430,380,330,12);
+ const reversed=reverseWave(g.frames);
+ assert.deepEqual(reversed.map(f=>f.clipPath),g.frames.slice(0,-1).reverse().map(f=>f.clipPath));
+ assert.equal(reversed.at(-1).offset,1);
+ assert.equal(reversed.at(-1).transform,g.frames[0].transform);
+});
+test("native hold survives closing, and releases only own attribute",()=>{
+ const run=new Function(`${section("function syncSidebarHold()","function updateLive()")}
+ let dead=false,cardOpen=false,dockOpen=false,closing=false;
+ const attrs=new Set(["data-zr-native","unrelated"]);
+ const node={hasAttribute:k=>attrs.has(k),toggleAttribute:(k,on)=>on?attrs.add(k):attrs.delete(k)};
+ const dock={hasAttribute:k=>k==="data-closing"&&closing};
+ const states=[];const sample=()=>{syncSidebarHold();states.push(attrs.has("panelopen"));};
+ sample();cardOpen=true;sample();cardOpen=false;dockOpen=true;sample();dockOpen=false;closing=true;sample();closing=false;sample();cardOpen=true;sample();dead=true;sample();
+ return {states,unrelated:attrs.has("unrelated")};`);
+ assert.deepEqual(run(),{states:[false,true,true,true,false,true,false],unrelated:true});
+});

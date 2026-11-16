@@ -146,14 +146,56 @@
   }
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(Math.max(lo,hi),v));
   function setVar(n,k,v){if(n.style.getPropertyValue(k)!==v)n.style.setProperty(k,v);}
+  function wavePath(width,height,side,span,topL,topR,bottomL,bottomR,rL,rR){
+    // The approved demo's asymmetric cubic contour. All frames have
+    // identical commands, so Gecko interpolates paths without JS ticks.
+    const l=width-span,r=width,w=span,tl=topL,tr=topR,bl=bottomL,br=bottomR;
+    const rl=Math.min(rL,w/2,(bl-tl)/2),rr=Math.min(rR,w/2,(br-tr)/2),k=.55228475;
+    const point=(x,y)=>`${(side==="right"?x:width-x).toFixed(3)} ${y.toFixed(3)}`;
+    const M=(x,y)=>"M "+point(x,y),C=(...p)=>"C "+point(p[0],p[1])+" "+point(p[2],p[3])+" "+point(p[4],p[5]);
+    const d=[
+      M(r-rr,tr),
+      C(r-w*.34,tr,l+w*.35,tl,l+rl,tl),
+      C(l+rl*(1-k),tl,l,tl+rl*(1-k),l,tl+rl),
+      C(l,tl+(bl-tl)*.34,l,bl-(bl-tl)*.25,l,bl-rl),
+      C(l,bl-rl*(1-k),l+rl*(1-k),bl,l+rl,bl),
+      C(l+w*.35,bl,r-w*.32,br,r-rr,br),
+      C(r-rr*(1-k),br,r,br-rr*(1-k),r,br-rr),
+      C(r,br-(br-tr)*.33,r,tr+(br-tr)*.33,r,tr+rr),
+      C(r,tr+rr*(1-k),r-rr*(1-k),tr,r-rr,tr),"Z"
+    ].join(" ");
+    return `path("${d}")`;
+  }
   function panelGeometry(r,width,height,x,y){
-    // The tiny seed crosses to the FAR edge while keeping its size.
-    // Only then does its clip grow into the complete panel.
     const sw=Math.min(19,r.seedW||19,width),sh=Math.min(19,r.seedH||19,height);
-    const sx=r.side==="right"?0:width-sw,sy=clamp(r.y-y-sh/2,0,height-sh);
-    const clip=`inset(${sy}px ${Math.max(0,width-sx-sw)}px ${Math.max(0,height-sy-sh)}px ${sx}px round ${Math.min(sw,sh)/2}px)`;
-    const dx=r.x-sw/2-x-sx,dy=r.y-sh/2-y-sy;
-    return {clip,from:`translate(${dx}px,${dy}px)`,at:"translate(0px,0px)",full:"inset(0px 0px 0px 0px round 12px)",x,y,width,height};
+    const sy=clamp(r.y-y-sh/2,0,height-sh),seedBottom=sy+sh;
+    const sourceX=r.side==="right"?x+width-sw/2:x+sw/2;
+    const dx=r.x-sourceX,dy=r.y-y-sy-sh/2;
+    const at="translate(0px,0px)",full="inset(0px 0px 0px 0px round 12px)";
+    // Width, leading/trailing heights and source displacement follow
+    // the approved demo: narrow connected stream, then diagonal fill.
+    const points=[
+      [0,sw,sy,sy,seedBottom,seedBottom,sw/2,sw/2,1,1,0],
+      [.12,Math.max(sw,width*.18),sy,sy,seedBottom,seedBottom,9,8,1,1,1],
+      [.27,Math.max(sw,width*.66),sy*.5,sy,seedBottom,seedBottom,12,7,.78,.8,1],
+      [.40,width,0,sy,Math.max(seedBottom,height*.10),seedBottom,12,7,.64,.6,1],
+      [.53,width,0,sy*.5,Math.max(seedBottom,height*.365),Math.max(seedBottom,height*.10),12,9,.30,.3,1],
+      [.70,width,0,0,Math.max(seedBottom,height*.80),Math.max(seedBottom,height*.288),12,12,.06,.06,1],
+      [.85,width,0,0,height,Math.max(seedBottom,height*.706),12,12,0,0,1],
+      [1,width,0,0,height,height,12,12,0,0,1]
+    ];
+    const frames=points.map(([offset,span,tl,tr,bl,br,rl,rr,tx,ty,opacity])=>({
+      offset,clipPath:wavePath(width,height,r.side,span,tl,tr,Math.min(height,bl),Math.min(height,br),rl,rr),
+      transform:`translate(${dx*tx}px,${dy*ty}px)`,opacity,easing:"cubic-bezier(.42,0,.58,1)"
+    }));
+    return {frames,at,full,x,y,width,height};
+  }
+  function reverseWave(frames,progress=1){
+    // Reverse the exact same contour and displacement, not a different
+    // rectangular retract. When interrupted, start at the current segment.
+    const p=clamp(progress,0,1);
+    const out=frames.filter(f=>f.offset<p).reverse().map(f=>({...f,offset:p>0?(p-f.offset)/p:1}));
+    return out;
   }
   function positionOverlays(following=false){
     if(!node||!dock||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
@@ -188,12 +230,7 @@
   function revealPanel(g){
     if(!g){entering=false;dock.removeAttribute("data-entering");armHide();return;}
     entering=true;dock.setAttribute("data-entering","true");
-    const frames=[
-      {clipPath:g.clip,transform:g.from,opacity:.55,offset:0,easing:"cubic-bezier(.25,.65,.3,1)"},
-      {clipPath:g.clip,transform:g.at,opacity:1,offset:.38,easing:"cubic-bezier(.45,0,.2,1)"},
-      {clipPath:g.full,transform:g.at,opacity:1,offset:1}
-    ];
-    animatePanel(frames,780,()=>{entering=false;dock?.removeAttribute("data-entering");armHide();});
+    animatePanel(g.frames,780,()=>{entering=false;dock?.removeAttribute("data-entering");armHide();});
   }
   function stopFollow(){
     if(followFrame)window.cancelAnimationFrame(followFrame);followFrame=0;followUntil=0;
@@ -230,6 +267,7 @@
     node.toggleAttribute("data-zr-native",native);
     node.toggleAttribute("data-zr-oneplane",!!one&&!slot);
     node.setAttribute("data-side",side());
+    syncSidebarHold();
     // Only OnePlane without a host (or an unsupported missing toolbox)
     // uses the floating fallback. A hidden native sidebar never reparents.
     node.toggleAttribute("data-fallback",!slot&&!native);
@@ -381,23 +419,26 @@
     if(!dock||(!dockOpen&&!cardOpen))return;
     cancelHide();
     const previous=window.getComputedStyle(dock);
-    const startClip=previous.clipPath==="none"?"inset(0px 0px 0px 0px round 12px)":previous.clipPath;
-    const startTransform=previous.transform==="none"?"translate(0px,0px)":previous.transform;
-    const startOpacity=Number(previous.opacity)||1;
+    const progress=entering&&panelAnimation?clamp(Number(panelAnimation.currentTime)/780,0,1):1;
+    const startClip=previous.clipPath,startTransform=previous.transform==="none"?"translate(0px,0px)":previous.transform;
+    const startOpacity=Number(previous.opacity);
     const g=positionOverlays();
-    cancelPanel();cardOpen=dockOpen=false;setConfirm(false);
-    overlayUntil=current()+650;dock.removeAttribute("data-open");dockBackdrop?.removeAttribute("data-open");
+    cancelPanel();
+    // Keep native Compact Mode held through the ENTIRE closing wave.
+    dock.setAttribute("data-closing","true");
+    cardOpen=dockOpen=false;setConfirm(false);
+    overlayUntil=current()+800;dock.removeAttribute("data-open");dockBackdrop?.removeAttribute("data-open");
     dock.inert=true;dock.setAttribute("aria-hidden","true");
     node?.setAttribute("aria-expanded","false");updateLive();
     if(restoreFocus&&visible(node))node.focus?.({preventScroll:true});
-    if(!g)return;
-    dock.setAttribute("data-closing","true");
-    animatePanel([
-      {clipPath:startClip,transform:startTransform,opacity:startOpacity,offset:0,easing:"cubic-bezier(.4,0,.3,1)"},
-      {clipPath:g.clip,transform:g.at,opacity:1,offset:.65,easing:"cubic-bezier(.35,0,.45,1)"},
-      {clipPath:g.clip,transform:g.from,opacity:0,offset:1}
-    ],600,()=>{dock?.removeAttribute("data-closing");});
-    follow(650);
+    const done=()=>{dock?.removeAttribute("data-closing");syncSidebarHold();};
+    if(!g||progress<=0){done();return;}
+    const reverse=reverseWave(g.frames,progress);
+    const start=progress<1&&startClip.startsWith("path(")?
+      {clipPath:startClip,transform:startTransform,opacity:Number.isFinite(startOpacity)?startOpacity:1}:
+      {...g.frames.at(-1)};
+    animatePanel([{...start,offset:0,easing:"cubic-bezier(.42,0,.58,1)"},...reverse],Math.max(1,780*progress),done);
+    follow(800);
   }
   function setPanelMode(full){
     cardOpen=!full;dockOpen=full;
@@ -540,7 +581,16 @@
   }
   function onKey(e){if(e.key==="Escape"){if(dockOpen&&confirming&&!clearing)setConfirm(false,true);else if(dockOpen||cardOpen)closeDock(true);}}
   function closeCard(){if(cardOpen)closeDock();}
-  function updateLive(){node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||dockOpen||!!flight);}
+  function syncSidebarHold(){
+    // Zen watches native sidebar descendants with [panelopen] and
+    // owns zen-compact-mode-active. We own only our button's attribute.
+    const hold=!dead&&!!node?.hasAttribute("data-zr-native")&&!!(cardOpen||dockOpen||dock?.hasAttribute("data-closing"));
+    if(node&&node.hasAttribute("panelopen")!==hold)node.toggleAttribute("panelopen",hold);
+  }
+  function updateLive(){
+    node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||dockOpen||!!flight);
+    syncSidebarHold();
+  }
   function openCard(){
     if(!dock||!node||dead||dockOpen)return;
     if(cardOpen){renderRecent();armHide();return;}
@@ -644,7 +694,7 @@
   function removed(d){if(history.delete(d)){historyOrder=null;recentOrder=null;}if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen||cardOpen)schedule();}
   function teardown(){
     ++epoch;
-    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();cancelPanel();cardOpen=dockOpen=false;stopFollow();overlayUntil=0;
+    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();cancelPanel();cardOpen=dockOpen=false;dock?.removeAttribute("data-closing");syncSidebarHold();stopFollow();overlayUntil=0;
     if(layoutFrame)window.cancelAnimationFrame(layoutFrame);layoutFrame=0;
     resizeObserver?.disconnect();resizeObserver=null;observedSidebar=anchor=null;
     if(list&&view)try{list.removeView(view);}catch{}

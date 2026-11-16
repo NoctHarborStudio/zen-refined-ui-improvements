@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0-preview.10
+
+- Implement the approved cubic fluid-wave contour: a connected narrow stream extends from the sidebar, then fills the panel diagonally; closing reverses the same frames, mirrored for the other side.
+- Hold native Zen Compact Mode via the indicator's own panelopen attribute until the entire closing animation finishes. Preserve native/user holds and release on teardown; no global preference changes.
+
 ## 0.6.0-preview.9
 
 - Replace the recent/full pair with one persistent downloads surface, one row cache and in-place header/sort expansion to the bottom of the viewport (12px margin).
