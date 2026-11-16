@@ -26,3 +26,5 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] OnePlane: hover rapidly across bookmarks, verify the stable mask and wrapper height do not change during animation. The contour follows preferences and structural changes only when the row settles.
 - [ ] Standalone Zen: top edge remains fixed, native folder menus and chevron remain usable; reduced motion and disabling restore native geometry.
 - [ ] Verify real startup flash and WebRender backdrop behavior on Windows; this cannot disable external window animations.
+
+- [ ] Verify CSSOM geometry rules do not emit bookmark style-attribute mutations during hover; confirm smooth handoff between multiple fast hover targets and freeze folder anchor while its menu is open.

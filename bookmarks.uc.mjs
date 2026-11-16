@@ -1,6 +1,6 @@
 /* Zen Refined — Magnetic Bookmarks
  * Native bookmarks only. No page content, network requests or browser preference
- * changes. The only preferences observed are this module's own settings.
+ * changes. Reads its own settings and OnePlane's contour preferences.
  */
 const PREFIX = "zen.refined.bookmarks.";
 const CONTROLLER = "__zenRefinedMagneticBookmarks";
@@ -31,7 +31,9 @@ function install() {
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
   let leaveTimer = 0, geometryFrame = 0, geometryPlan = null, contourFrame = 0, contourSurface = null, contourKey = "";
-  let baseHeight = 0, basePadding = 0, reserve = 0;
+  let baseHeight = 0, basePadding = 0, reserve = 0, ruleSerial=0;
+  const geometrySheet=document.createElementNS("http://www.w3.org/1999/xhtml","style");
+  geometrySheet.id="zr-bm-geometry-sheet";
   const wrapper = document.getElementById("zen-appcontent-navbar-wrapper");
   const contourPrefix = "zen.oneplane.fade-";
   const GAP_GRACE_MS = 180;
@@ -212,7 +214,7 @@ function install() {
       grow: 0, vertical: 0,
       start: numeric(style.marginInlineStart),
       end: numeric(style.marginInlineEnd),
-      timer: 0
+      rule: null
     };
     return metric;
   }
@@ -237,9 +239,26 @@ function install() {
     return Math.max(0, bounds.width - occupied - 8);
   }
 
+  function geometryStyle(item,m){
+    if(m.rule)return m.rule.style;
+    return item.style;
+  }
+  function installRule(item,m){
+    try{
+      const sheet=geometrySheet.sheet;if(!sheet)return;
+      const id=String(++ruleSerial),index=sheet.insertRule(`[data-zr-bm-geometry="${id}"] {}`,sheet.cssRules.length);
+      m.rule=sheet.cssRules[index];item.setAttribute("data-zr-bm-geometry",id);
+    }catch{}
+  }
+  function removeRule(item,m){
+    item.removeAttribute("data-zr-bm-geometry");
+    if(!m.rule)return;
+    try{const sheet=geometrySheet.sheet;const index=Array.from(sheet.cssRules).indexOf(m.rule);if(index>=0)sheet.deleteRule(index);}catch{}
+    m.rule=null;
+  }
   function forget(item){
     const m=state.get(item);if(!m)return;
-    item.removeAttribute("data-zr-bm-active");item.removeAttribute("data-zr-bm-managed");
+    item.removeAttribute("data-zr-bm-active");item.removeAttribute("data-zr-bm-managed");removeRule(item,m);
     for(const key of ["--zr-bm-margin-start","--zr-bm-margin-end","--zr-bm-grow",
       "--zr-bm-scale-x","--zr-bm-scale-y","--zr-bm-inner-x","--zr-bm-inner-y"])item.style.removeProperty(key);
     state.delete(item);
@@ -248,7 +267,10 @@ function install() {
   function applyGeometry(item,m){
     const sx=1+m.grow/Math.max(1,m.width),sy=1+(desiredY()-1)*m.vertical;
     const inner=Math.min(1.18,sx,sy);
-    const set=(key,value)=>{const v=String(value);if(item.style.getPropertyValue(key)!==v)item.style.setProperty(key,v);};
+    // CSSOM rule edits do not mutate the element style attribute. OnePlane
+    // observes bookmark DOM mutations; avoid forcing a mask pass each frame.
+    const style=geometryStyle(item,m);
+    const set=(key,value)=>{const v=String(value);if(style.getPropertyValue(key)!==v)style.setProperty(key,v);};
     set("--zr-bm-grow",(m.grow/2).toFixed(3)+"px");
     set("--zr-bm-scale-x",sx.toFixed(5));set("--zr-bm-scale-y",sy.toFixed(5));
     set("--zr-bm-inner-x",(inner/sx).toFixed(5));set("--zr-bm-inner-y",(inner/sy).toFixed(5));
@@ -292,18 +314,14 @@ function install() {
     geometryPlan={start:now,duration:motion.matches?0:settings.duration,items};
     if(motion.matches)samplePlan(now+1);else geometryFrame=window.requestAnimationFrame(geometryTick);
   }
-  function collapse(item,immediately=false){
-    if(!state.has(item))return;
-    if(immediately){forget(item);return;}
-    retarget();
-  }
   function expand(item){
     const m=measure(item);
     if(!(m.width>0)||!(m.height>0))return false;
     if(!state.has(item)){
-      state.set(item,m);
-      item.style.setProperty("--zr-bm-margin-start",m.start+"px");
-      item.style.setProperty("--zr-bm-margin-end",m.end+"px");
+      state.set(item,m);installRule(item,m);
+      const style=geometryStyle(item,m);
+      style.setProperty("--zr-bm-margin-start",m.start+"px");
+      style.setProperty("--zr-bm-margin-end",m.end+"px");
       applyGeometry(item,m);item.setAttribute("data-zr-bm-managed","true");
     }
     // The constant bottom reserve is larger than the maximum scale
@@ -483,6 +501,8 @@ function install() {
     cancelPendingLeave();
     openPopups.add(event.target);
     // Freeze the native folder anchor during opening; collapse after close.
+    if(geometryFrame)window.cancelAnimationFrame(geometryFrame);
+    geometryFrame=0;geometryPlan=null;
     if (raf) window.cancelAnimationFrame(raf);
     raf = 0;
     indicator.removeAttribute("data-zr-visible");
@@ -499,6 +519,7 @@ function install() {
     for(const item of [...state.keys()])if(item.parentElement!==list)forget(item);
     if(active&&(!eligible(active)||!toolbarVisible()))clear(true);
     if(!state.size){updateReserve();scheduleContour();}
+    else if(active&&!eligible(active))clear(true);
   });
   const resize = new ResizeObserver(() => {
     const next = toolbar.getBoundingClientRect().width;
@@ -545,9 +566,10 @@ function install() {
     toolbar.style.removeProperty("--zr-bm-base-height");
     toolbar.style.removeProperty("--zr-bm-base-pad-bottom");
     toolbar.style.removeProperty("--zr-bm-reserve");
-    indicator.remove();
+    geometrySheet.remove();indicator.remove();
   }
   try {
+    root.append(geometrySheet);
     toolbar.append(indicator);
     toolbarWidth = toolbar.getBoundingClientRect().width;
     readSettings();
@@ -557,6 +579,7 @@ function install() {
     observer.observe(root,{attributes:true,attributeFilter:["customizing","inDOMFullscreen","oneplane-active","zen-compact-mode"]});
     if(wrapper)panelObserver.observe(wrapper,{childList:true,subtree:false,attributes:true,attributeFilter:["data-op-panel-open"]});
     resize.observe(toolbar);
+    if(navbar)resize.observe(navbar);
     prefs.addObserver(PREFIX,prefsObserver);
     prefs.addObserver(contourPrefix,contourObserver);
     motion.addEventListener("change", prefsObserver);

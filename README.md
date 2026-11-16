@@ -12,7 +12,7 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, top-anch
 
 - 142% horizontal magnification by default, limited by available space.
 - Downward expansion from a higher resting row, 240 ms animation, small 12–18 px indicator.
-- Fixed lower reserve and a shared horizontal expansion budget. With OnePlane, a stable contour mask covers the resting row plus expansion room without changing every hover frame.
+- Fixed lower reserve and a shared horizontal expansion budget. With OnePlane, a stable contour mask covers the resting row plus expansion room without changing every hover frame. A shared animation plan updates CSSOM rules instead of repeatedly mutating the native bookmark nodes.
 - A spring-based indicator stretches in flight and relaxes at rest.
 - Native bookmark items, click actions and folder menus are retained.
 - Reduced-motion support and individual controls in Sine.
