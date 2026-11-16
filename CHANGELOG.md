@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.18
+
+- Correct the SessionStore import to the Gecko 160 path used by Zen 1.24.2b; missing optional lazy metadata no longer prevents Smart Search registration. Register immediately in an already initialized browser window and expose count-only runtime diagnostics. Real Zen verification pending.
+
 ## 0.6.0-preview.17
 
 - First Smart Search preview: native empty-query recent-tab results, current-workspace preference, exact tab identity switching, configurable maximum, native suggestion slots reserved. Private windows and typed queries are excluded; no persistent MRU database.

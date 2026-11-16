@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.6.0-preview.17`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.18`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -71,3 +71,7 @@ Grow from a subpixel point at the inner sidebar boundary, keep a real painted br
 
 - **Adaptive Page Transitions:** retired at the user's request after unreliable runtime behavior; inert archive in [legacy/adaptive-page-transitions](../legacy/adaptive-page-transitions/README.md). Do not restore without a new explicit decision.
 - **Older black-background loading-animation experiment:** historical General prototype; not a separate committed active feature. Do not infer a new implementation requirement from it.
+
+### Smart Search preview.18
+
+Fix native module registration after preview.17 user report of no visible change with and without OnePlane. Real browser verification pending; do not mark accepted until results appear and switch correctly.

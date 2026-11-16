@@ -150,3 +150,5 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Native Zen and OnePlane: Ctrl+T/empty URL bar shows MRU before native suggestions, arrow/Enter and click switch the exact tab, identical URLs/containers remain distinct. No new duplicate tab navigation.
 - [ ] Current space, Essentials, other spaces, lazy/unloaded, pinned/folders/split, closed/moved/navigated targets, private and multiple windows, native open-tab suggestions disabled, typed search/explicit search mode, Sine unload/reload and preference changes.
 - [ ] Check actual provider priority, row rendering, native keyboard selection, workspace transition, no network preloading and no duplicate provider after multiple window lifecycles.
+
+- [ ] Preview.18: verify `[Zen Refined] Smart Search provider ready` and `window.__zenRefinedSmartSearchStatus?.()` in Browser Console after opening an empty address bar. Verify actual rows, not just successful import.

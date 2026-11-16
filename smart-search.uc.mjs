@@ -4,7 +4,7 @@
  */
 (() => {
   const KEY="__zenRefinedSmartSearch",REGISTRY="__zenRefinedSmartSearchRegistry";
-  const NAME="ZenRefinedRecentTabs",TYPE="zr-recent-tab";
+  const NAME="ZenRefinedRecentTabs",TYPE="zr-recent-tab",STATUS="__zenRefinedSmartSearchStatus";
   const PREF="zen.refined.smart-search.enabled",LIMIT="zen.refined.smart-search.limit";
   const prefs=Services.prefs;
   const root=document.documentElement;
@@ -99,29 +99,40 @@
         try{return top?.getPriority(context)??1;}catch{return 1;}
       }
       state(controller){
-        const win=controller?.browserWindow;
+        const win=controller?.browserWindow||controller?.input?.browserWindow;
         if(!win||win.closed||!registry.windows.has(win))return null;
         try{if(privateUtils.isWindowPrivate(win))return null;}catch{return null;}
         return {win,state:registry.windows.get(win)};
       }
       async isActive(context,controller){
-        return !!this.state(controller)&&queryAllowed(context,Shared.RESULT_SOURCE.TABS,
+        const scope=this.state(controller);
+        const allowed=!!scope&&queryAllowed(context,Shared.RESULT_SOURCE.TABS,
           prefs.getBoolPref(PREF,true),prefs.getBoolPref("browser.urlbar.suggest.openpage",true));
+        if(scope?.state.diagnostic){
+          const d=scope.state.diagnostic;
+          d.queries++;d.eligible=allowed;
+          d.empty=context.searchString==="";d.hasTabSource=context.sources?.includes(Shared.RESULT_SOURCE.TABS)??false;
+          if(!allowed)d.emitted=0;
+        }
+        return allowed;
       }
       async startQuery(context,add,controller){
         const scope=this.state(controller);
         if(!scope||!queryAllowed(context,Shared.RESULT_SOURCE.TABS,prefs.getBoolPref(PREF,true),prefs.getBoolPref("browser.urlbar.suggest.openpage",true)))return;
         const {win,state}=scope;
-        const entries=selectRecent(collect(win,sessionStore,utils),context.maxResults,prefs.getIntPref(LIMIT,4));
+        const candidates=collect(win,sessionStore,utils);
+        const entries=selectRecent(candidates,context.maxResults,prefs.getIntPref(LIMIT,4));
+        if(state.diagnostic){state.diagnostic.candidates=candidates.length;state.diagnostic.emitted=0;}
         for(let i=0;i<entries.length;i++){
           const e=entries[i],token=remember(state,e);
           const detail=[i===0?"Recent tabs":"Recent tab",e.workspace,e.container].filter(Boolean).join(" · ");
-          add(this,new Result({
+          try{add(this,new Result({
             type:Shared.RESULT_TYPE.DYNAMIC,source:Shared.RESULT_SOURCE.TABS,
             suggestedIndex:i,
             payload:{dynamicType:TYPE,zrToken:token,zrTitle:e.title,zrDetail:detail,
               zrIcon:Shared.getIconForUrl(e.url)}
-          }));
+          }));if(state.diagnostic)state.diagnostic.emitted++;}
+          catch(e){if(state.diagnostic)state.diagnostic.error=String(e);console.warn("[Zen Refined] Smart Search result:",e);}
         }
       }
       getViewTemplate(){
@@ -158,6 +169,9 @@
     };
   }
   let manager=null,registry=null,disposed=false,observer=null,joined=false;
+  const diagnostic={version:2,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
+  const status=()=>({...diagnostic,registered:!!joined&&manager?.getProvider?.(NAME)===registry?.provider});
+  window[STATUS]=status;
   function install(){
     if(disposed||joined)return;
     try{
@@ -166,21 +180,28 @@
       const {UrlbarProvider,UrlbarUtils}=ChromeUtils.importESModule(base+"UrlbarUtils.sys.mjs");
       const {UrlbarShared}=ChromeUtils.importESModule("chrome://browser/content/urlbar/UrlbarShared.mjs");
       const {UrlbarResult}=ChromeUtils.importESModule("chrome://browser/content/urlbar/UrlbarResult.mjs");
-      const {SessionStore}=ChromeUtils.importESModule("resource:///modules/sessionstore/SessionStore.sys.mjs");
+      // Zen 1.24.2b / Gecko 160: use the same module path as native Library.
+      // Older Firefox used a resource:/// alias; do not let optional lazy
+      // metadata support prevent the provider itself from registering.
+      let SessionStore=null;
+      try{({SessionStore}=ChromeUtils.importESModule("moz-src:///browser/components/sessionstore/SessionStore.sys.mjs"));}
+      catch{try{({SessionStore}=ChromeUtils.importESModule("resource:///modules/sessionstore/SessionStore.sys.mjs"));}catch{diagnostic.lazyMetadataUnavailable=true;}}
       const {PrivateBrowsingUtils}=ChromeUtils.importESModule("resource://gre/modules/PrivateBrowsingUtils.sys.mjs");
-      if(PrivateBrowsingUtils.isWindowPrivate(window))return;
+      if(PrivateBrowsingUtils.isWindowPrivate(window)){diagnostic.stage="private";return;}
       manager=ProvidersManager?.getInstanceForSap?.("urlbar");
-      if(!manager?.registerProvider||!manager?.unregisterProvider||!manager?.getProvider)return;
+      if(!manager?.registerProvider||!manager?.unregisterProvider||!manager?.getProvider)throw Error("Native urlbar provider manager unavailable");
       registry=manager[REGISTRY];
       if(!registry){
-        if(manager.getProvider(NAME))return;
+        if(manager.getProvider(NAME))throw Error("Provider name already registered");
         registry={windows:new WeakMap(),count:0,provider:null};
         registry.provider=makeProvider(UrlbarProvider,UrlbarShared,UrlbarResult,UrlbarUtils,SessionStore,registry,manager,PrivateBrowsingUtils);
         manager.registerProvider(registry.provider);
         manager[REGISTRY]=registry;
       }
-      registry.windows.set(window,{sequence:0,targets:new Map()});registry.count++;joined=true;
-    }catch(e){console.warn("[Zen Refined] Smart Search unavailable:",e);}
+      registry.windows.set(window,{sequence:0,targets:new Map(),diagnostic});registry.count++;joined=true;
+      diagnostic.stage="ready";diagnostic.error=null;
+      console.info("[Zen Refined] Smart Search provider ready");
+    }catch(e){diagnostic.stage="error";diagnostic.error=String(e);console.warn("[Zen Refined] Smart Search unavailable:",e);}
   }
   function dispose(){
     if(disposed)return;disposed=true;
@@ -195,9 +216,10 @@
     }
     window.removeEventListener("unload",dispose);
     if(window[KEY]===dispose)delete window[KEY];
+    if(window[STATUS]===status)delete window[STATUS];
   }
   window[KEY]=dispose;window.addUnloadListener(dispose);window.addEventListener("unload",dispose,{once:true});
-  if(window.gBrowserInit?.delayedStartupFinished)install();
+  if(window.gBrowserInit?.delayedStartupFinished||(window.gBrowser&&window.gURLBar))install();
   else{
     observer=subject=>{if(subject!==window)return;Services.obs.removeObserver(observer,"browser-delayed-startup-finished");observer=null;install();};
     Services.obs.addObserver(observer,"browser-delayed-startup-finished");

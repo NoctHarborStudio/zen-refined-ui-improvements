@@ -13,3 +13,7 @@ First implementation: 0.6.0-preview.17. Native URL-bar provider only, not a repl
 
 - Zen 1.24.2b native Sidebar provider and Space Manager.
 - Gecko UrlbarProvidersManager, UrlbarProviderTopSites, UrlbarResult, UrlbarInputBase and SessionStore lazy state.
+
+## Preview.18 registration correction
+
+Use the native Library's moz-src SessionStore path; the former resource alias is a fallback only. Missing lazy metadata skips unloaded entries rather than blocking registration. Runtime diagnostic in Browser Console: `window.__zenRefinedSmartSearchStatus?.()` (registration state, query eligibility and counts; no URLs or titles). A successful registration logs `[Zen Refined] Smart Search provider ready`. The actual browser still needs testing.
