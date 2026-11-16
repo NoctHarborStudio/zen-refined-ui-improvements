@@ -32,7 +32,7 @@ function install() {
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
   let leaveTimer=0, flipTimer=0, flipEpoch=0, motionPlan=null, contourFrame=0, contourSurface=null, contourKey="";
   const flips=new Map(), flipNodes=new Set();
-  let pointerFrame=0, pendingPointer=null;
+  let pointerFrame=0,pendingPointer=null,lastIndicatorTransform="",lastPointer=null;
   const FLIP_EASE="cubic-bezier(.333333,0,.666667,1)";
   let baseHeight=0,basePadding=0,reserve=0;
   const busy=()=>state.size>0||flips.size>0;
@@ -274,14 +274,17 @@ function install() {
   function retarget(){
     // FIRST: capture painted positions, including interrupted WAAPI motion.
     // No stylesheet or layout mutations in this read phase.
-    const nodes=visibleRow(),first=new Map(),inners=new Map();
+    const nodes=visibleRow(),first=new Map(),inners=new Map(),innerParents=new Set();
     const firstToolbar=box(toolbar.getBoundingClientRect());
     for(const n of nodes){
       const r=box(n.getBoundingClientRect());
       if(r.width>0&&r.height>0)first.set(n,r);
-      if(n===active||state.has(n)||flipNodes.has(n))for(const ch of innerNodes(n)){
-        const t=window.getComputedStyle(ch).transform;
-        inners.set(ch,t&&t!=="none"?t:"scale(1,1)");
+      if(n===active||state.has(n)||flipNodes.has(n)){
+        innerParents.add(n);
+        for(const ch of innerNodes(n)){
+          const t=window.getComputedStyle(ch).transform;
+          inners.set(ch,t&&t!=="none"?t:"scale(1,1)");
+        }
       }
     }
     // Reset the old slot and animation before reading resting metrics.
@@ -324,14 +327,14 @@ function install() {
         n.setAttribute("data-zr-bm-flip","true");flipNodes.add(n);
         play(n,transform(tx,ty,sx,sy),transform(0,0,ex,ey),duration);
       }
-      if(isActive||inners.size)for(const ch of innerNodes(n)){
+      if(isActive||innerParents.has(n))for(const ch of innerNodes(n)){
         if(!isActive&&!inners.has(ch))continue;
         const ix=isActive?target.inner/ex:1,iy=isActive?target.inner/ey:1;
         play(ch,inners.get(ch)||"scale(1,1)","scale("+ix+","+iy+")",duration);
       }
     }
     if(flips.size){const epoch=flipEpoch;flipTimer=window.setTimeout(()=>endFlip(epoch),duration+34);}
-    else if(!active){toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
+    else{stopFlips();if(!active){toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}}
     return !!active;
   }
   function destination(now=window.performance.now()){
@@ -348,7 +351,8 @@ function install() {
   function paint() {
     const tail = clamp(vx * .0035, -5, 5);
     // Fixed 14x3 element; only transform is animated (no layout writes).
-    indicator.style.transform="translate3d("+(cx-w/2-tail).toFixed(2)+"px,"+(cy-h/2).toFixed(2)+"px,0) scale("+(w/14).toFixed(5)+","+(h/3).toFixed(5)+")";
+    const value="translate3d("+(cx-w/2-tail).toFixed(2)+"px,"+(cy-h/2).toFixed(2)+"px,0) scale("+(w/14).toFixed(5)+","+(h/3).toFixed(5)+")";
+    if(value!==lastIndicatorTransform){lastIndicatorTransform=value;indicator.style.transform=value;}
   }
 
   function animate(now) {
@@ -423,6 +427,7 @@ function install() {
   }
 
   function clear(immediately = false) {
+    pendingPointer=null;if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pointerFrame=0;
     cancelPendingLeave();
     const previous = active;
     active = null; pointerX = null; shown = false;
@@ -436,7 +441,13 @@ function install() {
   function onPointerMove(event){
     if(event.pointerType==="touch"||event.buttons||openPopups.size||!settings.enabled||dragging)return;
     const item=event.target?.closest?.("toolbarbutton.bookmark-item");
-    if(item===active&&active){cancelPendingLeave();pointerX=event.clientX;schedule();return;}
+    const moved=!lastPointer||event.clientX!==lastPointer.x||event.clientY!==lastPointer.y;
+    lastPointer={x:event.clientX,y:event.clientY};
+    if(!moved&&active&&item!==active)return;
+    if(item===active&&active){
+      pendingPointer=null;if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pointerFrame=0;
+      cancelPendingLeave();if(pointerX!==event.clientX){pointerX=event.clientX;schedule();}return;
+    }
     pendingPointer={target:event.target,clientX:event.clientX,clientY:event.clientY};
     if(!pointerFrame)pointerFrame=window.requestAnimationFrame(()=>{
       pointerFrame=0;const p=pendingPointer;pendingPointer=null;
@@ -487,7 +498,7 @@ function install() {
   }
 
   function onPointerLeave(event) {
-    pendingPointer=null;if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pointerFrame=0;
+    lastPointer=null;pendingPointer=null;if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pointerFrame=0;
     if (openPopups.size) return;
     if (event?.type === "pointerleave") queueLeave();
     else clear(true);
@@ -502,6 +513,7 @@ function install() {
   function onDragStart() { dragging = true; clear(true); }
   function onDragEnd() { dragging = false; }
   function onPopupShowing(event) {
+    pendingPointer=null;if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pointerFrame=0;
     cancelPendingLeave();
     openPopups.add(event.target);
     // Freeze the native folder anchor during opening; collapse after close.

@@ -16,7 +16,7 @@ Target: Zen 1.24.2b, Sine 2.3.3. Start in a separate test profile.
 - [ ] Reduced motion, light/dark themes, disable individual settings and Sine unload/reload.
 - [ ] No console errors or persistent custom styles after disabling.
 
-The implementation uses CSS margins to reserve horizontal layout space and a top-anchored transform to enlarge the artwork. Native bookmark nodes are not reparented. A single requestAnimationFrame loop animates the indicator only while needed. A bounded spring integration handles delayed frames. The native overflow behavior remains the responsibility of Places; the effect limits width using current available space.
+The implementation commits CSS margins only on a target change, then uses FLIP and native Web Animations transforms to enlarge and reposition the existing bookmark nodes. Native nodes are not reparented. A single requestAnimationFrame loop updates only the indicator transform using cached geometry. A bounded spring integration handles delayed frames. The native overflow behavior remains the responsibility of Places; the effect limits width using current available space.
 
 Known limitations of the untested preview: native overflow measurements can vary by theme; ancestor clipping may restrict downward expansion. Any compatibility adjustments should be made in Zen Refined, not by requiring users to edit other mods.
 
@@ -27,7 +27,7 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Standalone Zen: top edge remains fixed, native folder menus and chevron remain usable; reduced motion and disabling restore native geometry.
 - [ ] Verify real startup flash and WebRender backdrop behavior on Windows; this cannot disable external window animations.
 
-- [ ] Verify CSSOM geometry rules do not emit bookmark style-attribute mutations during hover; confirm smooth handoff between multiple fast hover targets and freeze folder anchor while its menu is open.
+- [ ] Verify the FLIP transform animations do not emit per-frame bookmark style-attribute mutations; confirm smooth handoff between multiple fast hover targets and freeze folder anchor while its menu is open.
 
 ## Preview.4 — FLIP
 
