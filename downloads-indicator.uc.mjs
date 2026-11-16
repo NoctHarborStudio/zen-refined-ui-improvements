@@ -99,6 +99,7 @@
     const parent=slot|| (native?group.parentElement:root);
     anchor=native?group:null;
     const changed=node.parentElement!==parent||(native&&node.nextElementSibling!==group);
+    const oldSide=node.getAttribute("data-side");
     if(changed){if(native)parent.insertBefore(node,group);else parent.append(node);}
     node.toggleAttribute("data-zr-hosted",!!slot);
     node.toggleAttribute("data-zr-native",!!native);
@@ -111,6 +112,7 @@
       resizeObserver.disconnect();observedSidebar=toolbox;if(toolbox)resizeObserver.observe(toolbox);
     }
     if(cardOpen)positionCard();
+    if(flight&&(changed||(oldSide&&oldSide!==side()))){cancelFlight();openCard();}
   }
   function scheduleMount(){
     if(dead||!node||layoutFrame)return;
@@ -126,7 +128,7 @@
   }
   function trackLayout(event){
     const n=event.target;
-    if(n===observedSidebar||n===anchor||n===get("zen-appcontent-navbar-wrapper"))scheduleMount();
+    if(n===observedSidebar||n===anchor||n===get("zen-appcontent-navbar-wrapper")||n===get("zen-main-app-wrapper"))scheduleMount();
   }
   function makeTrack(){
     const track=make("span","zr-download-track"),f=make("span","zr-download-fill");track.append(f);return [track,f];
@@ -149,8 +151,11 @@
     resizeObserver=typeof ResizeObserver==="function"?new ResizeObserver(scheduleMount):null;
     mount();
     layoutObserver=new MutationObserver(records=>{
-      if(records.some(r=>r.type==="attributes"?(r.target!==node&&r.target!==card&&!node.contains(r.target)&&!card.contains(r.target)):
-        [...r.addedNodes,...r.removedNodes].some(n=>n!==node&&n!==card&&n!==flight&&!node.contains(n)&&!card.contains(n))))scheduleMount();
+      if(records.some(r=>{
+        if(r.target===node||r.target===card||node.contains(r.target)||card.contains(r.target))return false;
+        if(r.type==="attributes")return true;
+        return [...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&n!==node&&n!==card&&!n.classList?.contains("zr-download-flight"));
+      }))scheduleMount();
     });
     layoutObserver.observe(root,{attributes:true,attributeFilter:["oneplane-active","customizing","zen-compact-mode","zen-sidebar-expanded","zen-has-hover","hidden","collapsed"],childList:true});
     const toolbox=get("navigator-toolbox");
@@ -166,10 +171,12 @@
     cancelHide();cardOpen=false;card?.removeAttribute("data-open");
     card?.setAttribute("aria-hidden","true");if(card)card.tabIndex=-1;
     node?.setAttribute("aria-expanded","false");
+    updateLive();
   }
+  function updateLive(){node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||!!flight);}
   function openCard(){
     if(!card||!node||dead)return;
-    cancelHide();cardOpen=true;positionCard();
+    cancelHide();cardOpen=true;updateLive();positionCard();
     card.setAttribute("data-open","true");card.setAttribute("aria-hidden","false");card.tabIndex=0;
     node.setAttribute("aria-expanded","true");
     hideTimer=window.setTimeout(closeCard,HOLD);
@@ -177,13 +184,14 @@
   function cancelFlight(){
     ++flightToken;
     if(flightAnimation)try{flightAnimation.cancel();}catch{}
-    flightAnimation=null;flight?.remove();flight=null;
+    flightAnimation=null;flight?.remove();flight=null;updateLive();
   }
   function launchFlight(){
     if(dead||!node)return;
     cancelFlight();closeCard();mount();
     const activeWindow=!document.hasFocus||document.hasFocus();
     if(!activeWindow)return;
+    node.setAttribute("data-live","true");
     if(reduced.matches||!visible(node)){openCard();return;}
     const r=icon.getBoundingClientRect(),tx=r.left+r.width/2,ty=r.top+r.height/2;
     const native=window.gZenUIManager?._lastClickPosition;
@@ -214,7 +222,7 @@
     lastRender=current();snapshot=summarize(batch.values());const s=snapshot;
     const details=(latest&&batch.get(latest))||[...batch.values()].find(x=>x.active)||[...batch.values()].at(-1);
     node.setAttribute("data-state",s.state);card.setAttribute("data-state",s.state);
-    node.toggleAttribute("data-live",s.active>0||s.state!=="idle");
+    updateLive();
     const unknown=s.state==="active"&&s.progress===null;
     node.toggleAttribute("data-indeterminate",unknown);card.toggleAttribute("data-indeterminate",unknown);
     for(const f of [fill,cardFill]){
@@ -250,7 +258,10 @@
     // Initial addView replays history. Only a transfer observed active in
     // this window can become a terminal notification.
     if(previous?.active){batch.set(d,next);latest=d;schedule(true);}
-    else if(!hydrating&&!previous&&(next.success||next.failed)&&fresh.has(d)){batch.set(d,next);latest=d;schedule(true);launchFlight();}
+    else if(!hydrating&&!previous&&(next.success||next.failed)&&fresh.has(d)){
+      if(![...batch.values()].some(x=>x.active))batch.clear();
+      batch.set(d,next);latest=d;schedule(true);launchFlight();
+    }
   }
   function added(d){if(!hydrating)fresh.add(d);changed(d);}
   function removed(d){if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}}

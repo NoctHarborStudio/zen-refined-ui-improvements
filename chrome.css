@@ -185,8 +185,8 @@
   justify-content:center;
   align-self:center;
   gap:4px;
-  min-width:44px;
-  width: max-content;
+  min-width:0;
+  width:58px;
   max-width:100%;
   min-height:33px;
   padding:5px 6px;
@@ -197,10 +197,10 @@
   cursor:pointer;
 }
 #zr-download-indicator:hover { background:color-mix(in srgb,currentColor 9%,transparent); }
-#zr-download-indicator .zr-download-speed { font-size:10px;white-space:nowrap;opacity:.88; }
+#zr-download-indicator .zr-download-speed { font-size:9px;white-space:nowrap;opacity:.88;max-width:100%;overflow:hidden;text-overflow:ellipsis; }
 #zr-download-indicator .zr-download-speed:empty { display:none; }
 #zr-download-indicator .zr-download-track { width:34px; }
-#zr-download-indicator:not([data-live]) .zr-download-track { display:none; }
+#zr-download-indicator[data-state="idle"] .zr-download-track { display:none; }
 #zr-download-indicator[data-fallback] {
   position:fixed !important;
   inset:70px 18px auto auto !important;
