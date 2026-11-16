@@ -19,6 +19,7 @@
   let lastDockRect=null,followFrame=0,followUntil=0,overlayUntil=0;
   let dock=null,dockList=null,dockEmpty=null,dockMore=null,dockBackdrop=null,dockNotice=null,dockOpen=false,limit=30;
   const history=new Map(),rows=new Map();
+  let historyOrder=null,cardHeight=82,dockHeight=0;
   let lastRender=0,snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"}),batch=new Map(),fresh=new WeakSet();
   const number=x=>Number.isFinite(x)?Math.max(0,x):0;
   const current=()=>window.performance.now();
@@ -81,7 +82,7 @@
     const value=root.getAttribute("zen-right-side");
     return value==="true"?"right":value==="false"?"left":prefs.getBoolPref(SIDE,false)?"right":"left";
   }
-  function dockRect(){
+  function dockRect(following=false){
     const right=side()==="right",w=window.innerWidth;
     const native=node?.hasAttribute("data-zr-native")&&observedSidebar?.isConnected;
     // The toolbox's DOMRect includes Zen's actual animated CSS translate.
@@ -89,8 +90,10 @@
     // Clamp the inner edge to the viewport instead of reusing a stale
     // expanded x coordinate. Keep native y independent of the slide.
     if(native){
-      const t=observedSidebar.getBoundingClientRect(),n=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
+      const t=observedSidebar.getBoundingClientRect();
       const edge=Math.max(0,Math.min(w,right?t.left:t.right));
+      if(following&&lastDockRect?.side===side())return {...lastDockRect,edge};
+      const n=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
       const y=n.height>0?n.top:(lastDockRect?.top??70),height=n.height||33;
       const iconY=i.height>0?i.top+i.height/2:y+height/2;
       const iconX=i.width>0?i.left+i.width/2:edge;
@@ -119,13 +122,17 @@
     setVar(n,"--zr-overlay-width",width+"px");
     n.setAttribute("data-side",r.side);
   }
-  function positionOverlays(){
+  function positionOverlays(following=false){
     if(!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
-    const r=dockRect();
-    if(cardOpen||current()<overlayUntil)positionOverlay(card,r,Math.min(264,Math.max(1,window.innerWidth-12)),card.offsetHeight||82);
+    const r=dockRect(following);
+    if(cardOpen||current()<overlayUntil){
+      if(!following)cardHeight=card.offsetHeight||82;
+      positionOverlay(card,r,Math.min(264,Math.max(1,window.innerWidth-12)),cardHeight);
+    }
     if(dockOpen||current()<overlayUntil){
       const width=Math.min(344,Math.max(1,window.innerWidth-12));
-      positionOverlay(dock,r,width,dock.offsetHeight||Math.min(460,window.innerHeight-16));
+      if(!following||!dockHeight)dockHeight=dock.offsetHeight||Math.min(460,window.innerHeight-16);
+      positionOverlay(dock,r,width,dockHeight);
       // Outside click catcher covers the content side only, so it never
       // blocks native sidebar hover or prevents the user moving the dock.
       const right=r.side==="right";
@@ -137,13 +144,13 @@
     if(followFrame)window.cancelAnimationFrame(followFrame);followFrame=0;followUntil=0;
   }
   function follow(ms=380){
-    if(dead||!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
+    if(dead||!node||node.hasAttribute("data-fallback")||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
     followUntil=Math.max(followUntil,current()+ms);
     if(followFrame)return;
     const tick=()=>{
       followFrame=0;
       if(dead||!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
-      positionOverlays();
+      positionOverlays(true);
       if(current()<followUntil)followFrame=window.requestAnimationFrame(tick);
     };
     followFrame=window.requestAnimationFrame(tick);
@@ -175,6 +182,7 @@
     if(changed||(oldSide&&oldSide!==side()))lastDockRect=null;
     if(toolbox!==observedSidebar){
       resizeObserver?.disconnect();observedSidebar=toolbox;if(toolbox)resizeObserver?.observe(toolbox);
+      if(card)resizeObserver?.observe(card);if(dock)resizeObserver?.observe(dock);
     }
     // Cache the last visible location on structural/visibility changes.
     if(cardOpen||dockOpen||current()<overlayUntil){positionOverlays();follow();}
@@ -299,17 +307,21 @@
     if(!dockOpen||!dockList)return;
     // Keep all native session-list entries in memory; render only a
     // bounded page, active items first, then newest first. Reuse rows.
-    const entries=[...history.entries()].reverse();
-    entries.sort((a,b)=>Number(b[1].active)-Number(a[1].active));
-    const wanted=entries.slice(0,limit),keep=new Set(wanted.map(([d])=>d));
+    if(!historyOrder){
+      historyOrder=[...history.keys()].reverse();
+      historyOrder.sort((a,b)=>Number(history.get(b).active)-Number(history.get(a).active));
+    }
+    const entries=historyOrder;
+    const wanted=entries.slice(0,limit),keep=new Set(wanted);
     for(const [d,row] of rows)if(!keep.has(d)){row.el.remove();rows.delete(d);}
     let index=0;
-    for(const [d,v] of wanted){
+    for(const d of wanted){
+      const v=history.get(d);
       let row=rows.get(d);
       if(!row){row=makeRow(d);rows.set(d,row);}
       const text=v.active?sizeText(v.bytes)+(v.known?" / "+sizeText(v.total):"")+" · "+speedText(v.speed):
         v.success?"Complete · "+sizeText(v.total||v.bytes):v.failed?"Failed":"Stopped";
-      if(row.name.textContent!==v.name)row.name.textContent=v.name;
+      if(row.name.textContent!==v.name){row.name.textContent=v.name;row.name.setAttribute("title",v.name);}
       if(row.meta.textContent!==text)row.meta.textContent=text;
       row.el.setAttribute("data-state",v.active?"active":v.success?"complete":v.failed?"failed":"stopped");
       row.el.toggleAttribute("data-indeterminate",v.active&&!v.known);
@@ -408,6 +420,7 @@
   function changed(d){
     if(dead||!node)return;
     const previous=batch.get(d),next=sample(d);
+    if(!history.has(d)||history.get(d).active!==next.active)historyOrder=null;
     history.set(d,next);
     if(next.active){
       if(!previous?.active){
@@ -426,7 +439,7 @@
     }else if(dockOpen)schedule();
   }
   function added(d){if(!hydrating)fresh.add(d);changed(d);}
-  function removed(d){history.delete(d);if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen)schedule();}
+  function removed(d){if(history.delete(d))historyOrder=null;if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen)schedule();}
   function teardown(){
     ++epoch;
     if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();closeCard();closeDock();stopFollow();overlayUntil=0;
@@ -441,7 +454,7 @@
     window.removeEventListener("pointerdown",trackClick,true);window.removeEventListener("pointerdown",outsideDock,true);window.removeEventListener("keydown",onKey,true);
     try{prefs.removeObserver(SIDE,scheduleMount);}catch{}
     node?.remove();card?.remove();node=fill=speed=icon=card=cardFill=cardName=cardSpeed=cardStatus=cardBytes=cardIcon=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
-    dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();limit=30;
+    dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();historyOrder=null;limit=30;cardHeight=82;dockHeight=0;
     snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"});
     root.removeAttribute(ACTIVE);root.removeAttribute("data-zr-downloads-native");lastDockRect=null;
   }

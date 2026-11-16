@@ -240,10 +240,10 @@
   visibility:hidden;
   pointer-events:none;
   transform-origin:left center;
-  transform:translateX(-20px) scale(.96);
+  transform:translateX(-20px);
   transition:transform 500ms cubic-bezier(.22,.65,.18,1),opacity 380ms ease,visibility 500ms;
 }
-#zr-download-card[data-side="right"] { transform-origin:right center;transform:translateX(20px) scale(.96); }
+#zr-download-card[data-side="right"] { transform-origin:right center;transform:translateX(20px); }
 #zr-download-card[data-open] { opacity:1;visibility:visible;pointer-events:auto;transform:none; }
 #zr-download-card .zr-download-body { display:flex;flex:1;min-width:0;flex-direction:column;gap:8px; }
 #zr-download-card .zr-download-line { display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0; }
@@ -319,10 +319,10 @@
   box-shadow:0 8px 28px #0004;
   opacity:0;visibility:hidden;pointer-events:none;
   transform-origin:left center;
-  transform:translateX(-20px) scale(.98);
+  transform:translateX(-20px);
   transition:transform 500ms cubic-bezier(.22,.65,.18,1),opacity 360ms ease,visibility 500ms;
 }
-#zr-download-dock[data-side="right"] { transform-origin:right center;transform:translateX(20px) scale(.98); }
+#zr-download-dock[data-side="right"] { transform-origin:right center;transform:translateX(20px); }
 #zr-download-dock[data-open] { opacity:1;visibility:visible;pointer-events:auto;transform:none; }
 #zr-download-dock .zr-dock-header { display:flex;align-items:center;justify-content:space-between;padding:2px 2px 8px;border-bottom:1px solid color-mix(in srgb,currentColor 10%,transparent); }
 #zr-download-dock .zr-dock-title { font-size:14px;font-weight:600; }
