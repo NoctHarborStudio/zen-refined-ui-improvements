@@ -2,7 +2,7 @@
 
 A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
-**Current development preview: `0.6.0-preview.20`** · Target: Zen 1.24.2b / Sine 2.3.3.
+**Current development preview: `0.6.0-preview.21`** · Target: Zen 1.24.2b / Sine 2.3.3.
 
 > Preview software. Core features have been tested by the maintainer/user in Zen; compatibility across operating systems, themes and configurations is not guaranteed. Install in a test profile first.
 
@@ -37,7 +37,7 @@ A small gray loading line grows symmetrically from the top center of the browser
 
 ## Smart Search
 
-When the native address bar opens with an empty query (including Ctrl+T when Zen opens its floating search), recent active tabs appear above regular suggestions. Two grouped sections, up to six recent tabs and six native recommendations, two columns where space permits. Relative activity time on the left; the active tab is included. The active tab comes first, followed by current workspace and Essentials, then other known workspaces by activation time. Each recent result shows its title and domain, optional workspace/container identity when relevant, and the native-style action label. Selecting it uses the exact existing native tab, including OnePlane's mirrored UI. Typed search and private browsing remain unchanged. No separate history store or network requests. [Architecture](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/smart-search.md).
+When the native address bar opens with an empty query (including Ctrl+T when Zen opens its floating search), recent active tabs appear above regular suggestions. Two grouped sections, up to six recent tabs and six native recommendations, two columns filled top-to-bottom where space permits, with chronological rails and a permanent divider. Relative activity time on the left; the active tab is included. The active tab comes first. Current workspace and Essentials receive priority when choosing the six entries; selected entries are displayed in descending activation time. Each recent result shows its title and domain, optional workspace/container identity when relevant, and the native-style action label. Selecting it uses the exact existing native tab, including OnePlane's mirrored UI. Typed search and private browsing remain unchanged. No separate history store or network requests. [Architecture](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/smart-search.md).
 
 ## Startup and closing
 
@@ -80,7 +80,7 @@ The following are **planned, not available yet**:
 
 1. **Smart Compact Mode** — intentional edge-hover and multi-monitor behavior, reusing native delay preferences where possible.
 2. **Smart Context Menu** — compact organization and configurable native tab commands.
-Smart Search grouped grid is implemented in preview.20; native-browser testing remains pending.
+Smart Search grouped grid is implemented in preview.21; native-browser testing remains pending.
 
 Native Zen Library already provides history search and recently closed tabs, so a separate History Dock is not planned. Other visual refinements will be based on reproducible issues. Semi-Compact Mode and startup performance investigations remain deferred.
 
