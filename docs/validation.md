@@ -41,3 +41,14 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Only currently or previously enlarged cards can use scaling. Retargets preserve in-flight scale on outgoing cards.
 - [ ] Device-pixel-aligned margin growth never exceeds the layout budget. Translation ends at native layout; temporary effects are canceled immediately on Animation.finished, with a bounded watchdog.
 - [ ] Compare native text sharpness during and after hover handoffs on Windows at different DPI settings. Gecko may still change antialiasing on translated content; real compositor testing remains necessary.
+
+## Preview.6 — native text positioning
+
+- [ ] No transform animation or static scale on any native bookmark/label/icon; only an empty ::before decoration may be transformed. Native text keeps its original font size.
+- [ ] Relative position keyframes are aligned to whole device pixels; endpoints release to native zero offsets. Handoff and cancellation retain the current position/card progress.
+- [ ] Verify stationary text and moving text during hover handoffs, at multiple Windows DPI settings. Native layout positioning can require main-thread paint, but no per-frame JS reads/writes, animated margin changes or native item resize.
+- [ ] Verify pseudo-element background hit-testing, native clicks/folder popup, stable OnePlane mask, and performance on real Zen. A pseudo-element animation unavailable on a given build falls back to a static card rather than transforming text.
+
+## Planned startup animation (not implemented)
+
+- [ ] Investigate browser-chrome initialization, staged UI appearance and a synchronized startup reveal. Preserve existing placeholder preference restoration and respect reduced motion. Do not add artificial startup latency.

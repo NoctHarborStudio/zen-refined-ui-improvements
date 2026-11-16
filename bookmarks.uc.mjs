@@ -31,11 +31,11 @@ function install() {
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
   let leaveTimer=0, flipTimer=0, flipEpoch=0, motionPlan=null, contourFrame=0, contourSurface=null, contourKey="";
-  const flips=new Map(), flipNodes=new Set(), scaledParents=new Set();
+  const flips=new Map(),flipNodes=new Set(),cards=new Map();
   let pointerFrame=0,pendingPointer=null,lastIndicatorTransform="",lastPointer=null;
   const FLIP_EASE="cubic-bezier(.333333,0,.666667,1)";
   let baseHeight=0,basePadding=0,reserve=0;
-  const busy=()=>state.size>0||flips.size>0;
+  const busy=()=>state.size>0||flips.size>0||cards.size>0&&!active;
   const wrapper = document.getElementById("zen-appcontent-navbar-wrapper");
   const contourPrefix = "zen.oneplane.fade-";
   const GAP_GRACE_MS = 180;
@@ -227,102 +227,130 @@ function install() {
   }
   function box(r){return {left:r.left,top:r.top,width:r.width,height:r.height,right:r.right,bottom:r.bottom};}
   function local(r,t){return {left:r.left-t.left-toolbar.clientLeft,top:r.top-t.top-toolbar.clientTop,width:r.width,height:r.height};}
-  function innerNodes(item){return Array.from(item.querySelectorAll?.(".toolbarbutton-icon, .toolbarbutton-text")||[]);}
+  function pixelRatio(){const n=Number(window.devicePixelRatio);return Number.isFinite(n)&&n>0?n:1;}
+  function snapOffset(n){const d=pixelRatio();return Math.round(n*d)/d;}
+  function snapGrowth(n){const d=pixelRatio();return Math.max(0,Math.floor(n*d/2+1e-7)*2/d);}
+  function removeCard(node){
+    node.removeAttribute("data-zr-bm-card");
+    for(const k of ["--zr-bm-card-x","--zr-bm-card-y","--zr-bm-card-opacity"])node.style.removeProperty(k);
+    cards.delete(node);
+  }
   function stopFlips(){
     flipEpoch++;
     if(flipTimer)window.clearTimeout(flipTimer);flipTimer=0;
     for(const a of flips.values())try{a.cancel();}catch{}
     flips.clear();
     for(const n of flipNodes)n.removeAttribute("data-zr-bm-flip");
-    flipNodes.clear();scaledParents.clear();
+    flipNodes.clear();
   }
   function resetActive(){
     for(const item of state.keys()){
       item.removeAttribute("data-zr-bm-active");
       item.removeAttribute("data-zr-bm-managed");
-      for(const k of ["--zr-bm-margin-start","--zr-bm-margin-end","--zr-bm-grow","--zr-bm-scale-x","--zr-bm-scale-y","--zr-bm-inner-x","--zr-bm-inner-y"])item.style.removeProperty(k);
+      for(const k of ["--zr-bm-margin-start","--zr-bm-margin-end","--zr-bm-grow"])item.style.removeProperty(k);
     }
     state.clear();
+    for(const n of [...cards.keys()])removeCard(n);
   }
   function setActive(item,m,grow){
-    const sx=1+grow/Math.max(1,m.width),sy=desiredY(),inner=Math.min(1.18,sx,sy);
+    const sx=1+grow/Math.max(1,m.width),sy=desiredY();
     state.set(item,{...m,sx,sy,grow});
     item.style.setProperty("--zr-bm-margin-start",m.start+"px");
     item.style.setProperty("--zr-bm-margin-end",m.end+"px");
     item.style.setProperty("--zr-bm-grow",grow/2+"px");
-    // First commit the final slot but leave scale at identity until the
-    // Last geometry has been read. No writes between geometry reads.
     item.setAttribute("data-zr-bm-managed","true");
     item.setAttribute("data-zr-bm-active","true");
-    return {sx,sy,inner};
+    return {sx,sy,opacity:1};
   }
-  function transform(dx,dy,sx=1,sy=1){
-    return "translate3d("+dx.toFixed(4)+"px,"+dy.toFixed(4)+"px,0) scale("+sx.toFixed(6)+","+sy.toFixed(6)+")";
+  const restingCard={sx:1,sy:1,opacity:0};
+  function cardSample(node){
+    const p=cards.get(node);if(!p)return restingCard;
+    // Read the actual animation progress on retarget, not computed style
+    // on every frame. No native label is transformed at any point.
+    let t=1;
+    try{const progress=p.animation?.effect?.getComputedTiming().progress;
+      if(typeof progress==="number")t=clamp(progress,0,1);
+    }catch{}
+    const a=p.from,b=p.to;
+    return {sx:a.sx+(b.sx-a.sx)*t,sy:a.sy+(b.sy-a.sy)*t,opacity:a.opacity+(b.opacity-a.opacity)*t};
   }
-  function pixelRatio(){const n=Number(window.devicePixelRatio);return Number.isFinite(n)&&n>0?n:1;}
-  function snapOffset(n){const d=pixelRatio();return Math.round(n*d)/d;}
-  function snapGrowth(n){
-    // Each margin is a whole device pixel. A centered row therefore moves
-    // by a whole pixel too, where its native layout permits this.
-    const d=pixelRatio();return Math.max(0,Math.floor(n*d/2+1e-7)*2/d);
+  function watchAnimation(key,a,done){
+    flips.set(key,a);const epoch=flipEpoch;
+    a.finished?.then(()=>{
+      if(epoch!==flipEpoch||flips.get(key)!==a)return;
+      flips.delete(key);
+      try{a.cancel();}catch{}
+      done?.();
+      if(!flips.size)endFlip(epoch);
+    },()=>{});
   }
-  function translation(dx,dy){
-    const x=snapOffset(dx),y=snapOffset(dy);
-    // Do not attach identity scaling or a 3D transform to ordinary labels.
-    if(x===0&&y===0)return "none";
-    return y===0?"translateX("+x+"px)":"translate("+x+"px,"+y+"px)";
+  function moveFrames(dx,dy){
+    // Quantize *every* offset, not just the endpoints. Relative positioning
+    // moves the native frame without a transform picture-cache surface.
+    // At rest the offset is exactly zero (no retained animation).
+    const d=pixelRatio(),x=Math.round(dx*d),y=Math.round(dy*d),steps=Math.min(240,Math.max(Math.abs(x),Math.abs(y)));
+    if(!steps)return [];
+    const frames=[];
+    for(let i=0;i<=steps;i++){
+      const t=i/steps,left=Math.round(x*(1-t))/d,top=Math.round(y*(1-t))/d;
+      frames.push({offset:t,left:left+"px",top:top+"px",easing:"steps(1,end)"});
+    }
+    return frames;
   }
-  function isIdentity(t){
-    if(!t||t==="none")return true;
-    const m=/^(matrix|matrix3d|scale)\(([^)]+)\)$/.exec(t.trim());if(!m)return false;
-    const a=m[2].split(/[,\s]+/).filter(Boolean).map(Number);
-    const identity=m[1]==="matrix"?[1,0,0,1,0,0]:m[1]==="matrix3d"?[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]:a.length===1?[1]:[1,1];
-    return a.length===identity.length&&a.every((v,i)=>Number.isFinite(v)&&Math.abs(v-identity[i])<.00001);
-  }
-  function play(node,from,to,duration){
-    if(!duration||from===to||(isIdentity(from)&&isIdentity(to)))return false;
+  function moveNative(node,dx,dy,duration){
+    if(!duration)return;
+    const frames=moveFrames(dx,dy);if(!frames.length)return;
+    node.setAttribute("data-zr-bm-flip","true");flipNodes.add(node);
     try{
-      const a=node.animate([{transform:from},{transform:to}],{duration,easing:FLIP_EASE,fill:"both"});
-      flips.set(node,a);
-      const epoch=flipEpoch;
-      // Remove the animation effect as soon as it actually finishes, not
-      // one frame (or a fixed grace period) later. Resting text is native.
-      a.finished?.then(()=>{
-        if(epoch!==flipEpoch||flips.get(node)!==a)return;
-        flips.delete(node);
-        try{a.cancel();}catch{}
-        if(flipNodes.delete(node))node.removeAttribute("data-zr-bm-flip");
-        scaledParents.delete(node);
-        if(!flips.size)endFlip(epoch);
-      },()=>{});
-      return true;
-    }catch{return false;}
+      const a=node.animate(frames,{duration,easing:FLIP_EASE,fill:"both"});
+      watchAnimation(node,a,()=>{flipNodes.delete(node);node.removeAttribute("data-zr-bm-flip");});
+    }catch{flipNodes.delete(node);node.removeAttribute("data-zr-bm-flip");}
+  }
+  function animateCard(node,from,to,duration){
+    if(!duration&&to.opacity===0)return;
+    node.setAttribute("data-zr-bm-card","true");
+    node.style.setProperty("--zr-bm-card-x",String(to.sx));
+    node.style.setProperty("--zr-bm-card-y",String(to.sy));
+    node.style.setProperty("--zr-bm-card-opacity",String(to.opacity));
+    const record={from,to,animation:null};cards.set(node,record);
+    if(!duration||Math.abs(from.sx-to.sx)+Math.abs(from.sy-to.sy)+Math.abs(from.opacity-to.opacity)<.0001){
+      if(to.opacity===0)removeCard(node);return;
+    }
+    try{
+      const frame=p=>({transform:"scale("+p.sx+","+p.sy+")",opacity:p.opacity});
+      // Target only the empty decorative pseudo-element, never the native
+      // XUL toolbarbutton or its label/icon. Gecko supports pseudoElement.
+      const effect=new window.KeyframeEffect(node,[frame(from),frame(to)],{duration,easing:FLIP_EASE,fill:"both",pseudoElement:"::before"});
+      if(effect.pseudoElement!=="::before")throw Error("pseudo-element animation unavailable");
+      const a=new window.Animation(effect,document.timeline);
+      record.animation=a;a.play();
+      watchAnimation(record,a,()=>{
+        if(cards.get(node)!==record)return;
+        record.animation=null;
+        if(to.opacity===0)removeCard(node);
+      });
+    }catch{
+      // Static decorative end state is safe; no fallback scales a label.
+      record.animation=null;if(to.opacity===0)removeCard(node);
+    }
   }
   function endFlip(epoch){
     if(epoch!==flipEpoch)return;
     stopFlips();
+    for(const [n,p] of [...cards]){p.animation=null;if(p.to.opacity===0)removeCard(n);}
     if(!active){motionPlan=null;toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
   }
   function retarget(){
-    // FIRST: capture painted positions, including interrupted WAAPI motion.
-    // No stylesheet or layout mutations in this read phase.
-    const nodes=visibleRow(),first=new Map(),inners=new Map();
-    const formerlyScaled=new Set([...state.keys(),...scaledParents]);
+    const nodes=visibleRow(),first=new Map(),oldCards=new Map();
     const firstToolbar=box(toolbar.getBoundingClientRect());
+    // FIRST: native rects contain only layout coordinates (left/top);
+    // the decorative card scales are independent of the native rect.
     for(const n of nodes){
-      const r=box(n.getBoundingClientRect());
-      if(r.width>0&&r.height>0)first.set(n,r);
-      // Capture child transforms only for a new/previous enlarged card.
-      // Translation-only siblings must never get child identity animations.
-      if(n===active||formerlyScaled.has(n))for(const ch of innerNodes(n)){
-        const t=window.getComputedStyle(ch).transform;
-        if(!isIdentity(t))inners.set(ch,t);
-      }
+      const r=box(n.getBoundingClientRect());if(r.width>0&&r.height>0)first.set(n,r);
+      if(cards.has(n))oldCards.set(n,cardSample(n));
     }
-    // Reset the old slot and animation before reading resting metrics.
     stopFlips();resetActive();
-    const natural=new Map();
-    const bounds=list.getBoundingClientRect(),gap=parseFloat(window.getComputedStyle(list).columnGap)||0;
+    const natural=new Map(),bounds=list.getBoundingClientRect(),gap=parseFloat(window.getComputedStyle(list).columnGap)||0;
     let occupied=Math.max(0,nodes.length-1)*gap;
     for(const n of nodes){
       const r=box(n.getBoundingClientRect()),style=window.getComputedStyle(n);
@@ -331,51 +359,28 @@ function install() {
     }
     const budget=Math.max(0,bounds.width-occupied-12),m=natural.get(active);
     if(active&&(!m||m.width<=0||m.height<=0)){active=null;motionPlan=null;toolbar.removeAttribute("data-zr-bm-room");scheduleContour();return false;}
-    // LAST: commit the final layout once, independent of refresh rate.
-    // The previous slot is already gone; two expanded slots cannot
-    // temporarily overrun the native Places overflow budget.
-    let target=null;
-    if(active){toolbar.setAttribute("data-zr-bm-room","true");target=setActive(active,m,snapGrowth(Math.min(m.width*(settings.scale-1),budget)));}
-    else toolbar.setAttribute("data-zr-bm-room","true");
+    // Commit one final horizontal slot. Native button dimensions remain
+    // fixed, so OnePlane's ResizeObserver does not see animated resizing.
+    toolbar.setAttribute("data-zr-bm-room","true");
+    const target=active?setActive(active,m,snapGrowth(Math.min(m.width*(settings.scale-1),budget))):null;
     const lastToolbar=box(toolbar.getBoundingClientRect()),last=new Map();
     for(const n of nodes){const r=box(n.getBoundingClientRect());if(r.width>0&&r.height>0)last.set(n,r);}
     const duration=motion.matches?0:settings.duration,start=window.performance.now();
     motionPlan=null;
-    // INVERT + PLAY: compositor-friendly transforms only, with a fixed
-    // top edge. No JS callback edits margins or reads layout per frame.
     for(const [n,b] of last){
-      const a=first.get(n)||b,tx=a.left+a.width/2-b.left-b.width/2,ty=a.top-b.top;
-      const sx=a.width/Math.max(1,b.width),sy=a.height/Math.max(1,b.height);
-      const isActive=n===active,ex=isActive?target.sx:1,ey=isActive?target.sy:1;
+      const a=first.get(n)||b,dx=a.left-b.left,dy=a.top-b.top;
+      moveNative(n,dx,dy,duration);
+      const isActive=n===active,from=oldCards.get(n)||restingCard,to=isActive?target:restingCard;
+      if(isActive||oldCards.has(n))animateCard(n,from,to,duration);
       if(isActive){
-        n.style.setProperty("--zr-bm-scale-x",String(ex));n.style.setProperty("--zr-bm-scale-y",String(ey));
-        n.style.setProperty("--zr-bm-inner-x",String(target.inner/ex));n.style.setProperty("--zr-bm-inner-y",String(target.inner/ey));
         const f=local(a,firstToolbar),l=local(b,lastToolbar);
-        motionPlan={start,duration,from:f,to:{left:l.left+b.width*(1-ex)/2,top:l.top,width:b.width*ex,height:b.height*ey},
+        motionPlan={start,duration,from:{left:f.left+a.width*(1-from.sx)/2,top:f.top,width:a.width*from.sx,height:a.height*from.sy},
+          to:{left:l.left+b.width*(1-to.sx)/2,top:l.top,width:b.width*to.sx,height:b.height*to.sy},
           originX:lastToolbar.left+toolbar.clientLeft,height:lastToolbar.height};
       }
-      // Only the incoming enlarged card and cards still shrinking from a
-      // previous enlargement may scale. All other siblings translate in 2D.
-      const scaling=isActive||(formerlyScaled.has(n)&&(Math.abs(sx-1)*b.width+Math.abs(sy-1)*b.height>.05));
-      const from=scaling?transform(tx,ty,sx,sy):translation(a.left-b.left,ty);
-      const to=scaling?transform(0,0,ex,ey):"none";
-      const moving=scaling?Math.abs(tx)+Math.abs(ty)+Math.abs(sx-ex)*b.width+Math.abs(sy-ey)*b.height>.05:from!=="none";
-      if(duration&&moving){
-        n.setAttribute("data-zr-bm-flip","true");flipNodes.add(n);
-        if(play(n,from,to,duration)){if(scaling)scaledParents.add(n);}
-        else{flipNodes.delete(n);n.removeAttribute("data-zr-bm-flip");}
-      }
-      if(isActive||formerlyScaled.has(n))for(const ch of innerNodes(n)){
-        const from=inners.get(ch)||"none";
-        const ix=isActive?target.inner/ex:1,iy=isActive?target.inner/ey:1;
-        const to=isActive?"scale("+ix+","+iy+")":"none";
-        if(!isActive&&!inners.has(ch))continue;
-        play(ch,from,to,duration);
-      }
     }
-    // Safety cleanup only; normal completion is driven by Animation.finished.
-    if(flips.size){const epoch=flipEpoch;flipTimer=window.setTimeout(()=>endFlip(epoch),duration+250); }
-    else{stopFlips();if(!active){toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}}
+    if(flips.size){const epoch=flipEpoch;flipTimer=window.setTimeout(()=>endFlip(epoch),duration+250);}
+    else endFlip(flipEpoch);
     return !!active;
   }
   function destination(now=window.performance.now()){
@@ -504,7 +509,8 @@ function install() {
     // Keep the active bookmark while the pointer is still within its
     // original row slot and downward-expanded artwork.
     if (active && eligible(active)) {
-      const r = active.getBoundingClientRect();
+      const native=active.getBoundingClientRect(),c=cardSample(active);
+      const r={left:native.left-native.width*(c.sx-1)/2,right:native.right+native.width*(c.sx-1)/2,top:native.top,bottom:native.top+native.height*c.sy};
       const t = toolbar.getBoundingClientRect();
       if (event.clientX >= r.left - 2 && event.clientX <= r.right + 2 &&
           event.clientY >= Math.min(r.top, t.top) && event.clientY <= t.bottom) {
@@ -573,7 +579,7 @@ function install() {
 
   const observer = new MutationObserver(() => {
     if (dead) return;
-    if(active&&(!eligible(active)||!toolbarVisible())||[...flipNodes].some(n=>n.parentElement!==list))clear(true);
+    if(active&&(!eligible(active)||!toolbarVisible())||[...flipNodes,...cards.keys()].some(n=>n.parentElement!==list))clear(true);
     if(!busy()){updateReserve();scheduleContour();}
   });
   const resize = new ResizeObserver(() => {

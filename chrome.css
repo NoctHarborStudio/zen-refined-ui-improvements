@@ -22,41 +22,49 @@
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item {
   align-self: flex-start !important;
+  flex-shrink: 0 !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
   overflow: visible !important;
 }
-/* Final layout is committed once. WAAPI animates transform only.
- * Normal transform declarations are intentional: important declarations
- * would override Web Animations' effect in the CSS cascade. */
+/* Text is painted as native text. FLIP uses relative left/top on the
+ * actual nodes; only the empty decorative pseudo-element is scaled. */
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip],
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
-  transform-origin: center top !important;
-  transition: background-color 180ms ease, box-shadow 180ms ease !important;
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed],
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card] {
+  position: relative !important;
+  left: 0;
+  top: 0;
+  /* Never force a transformed layer for a text-bearing bookmark. */
+  transition: none !important;
 }
-/* Let Gecko choose compositing for moving bookmarks. Forcing a layer on
- * every neighbor can change text antialiasing even at identity scale. */
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
-  position: relative;
   flex-shrink: 0 !important;
   margin-inline-start: calc(var(--zr-bm-margin-start, 0px) + var(--zr-bm-grow, 0px)) !important;
   margin-inline-end: calc(var(--zr-bm-margin-end, 0px) + var(--zr-bm-grow, 0px)) !important;
-  transform: scale(var(--zr-bm-scale-x, 1), var(--zr-bm-scale-y, 1));
 }
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] {
-  background-color: color-mix(in srgb, currentColor 16%, transparent) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .20) !important;
-  border-radius: 7px !important;
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card] {
+  z-index: 1;
+  overflow: visible !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-active] {
   z-index: 3;
 }
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] :is(.toolbarbutton-icon, .toolbarbutton-text) {
-  transform: scale(var(--zr-bm-inner-x, 1), var(--zr-bm-inner-y, 1));
-  transform-origin: center;
-  transition: none !important;
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .20);
+  transform-origin: center top;
+  transform: scale(var(--zr-bm-card-x, 1), var(--zr-bm-card-y, 1));
+  opacity: var(--zr-bm-card-opacity, 0);
+  pointer-events: none;
 }
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip] :is(.toolbarbutton-icon, .toolbarbutton-text) {
-  transform-origin: center;
-  transition: none !important;
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-active]::before {
+  pointer-events: auto;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator {
   display: block !important;
