@@ -13,7 +13,7 @@
   if(root.hasAttribute("popup-window")||typeof window.addUnloadListener!=="function")return;
   window[KEY]?.dispose?.();
   let dead=false,epoch=0,view=null,list=null,node=null,fill=null,speed=null,icon=null,host=null;
-  let flight=null,flightAnimation=null,panelAnimation=null,panelToken=0,entering=false,manualHold=false,overlayLayer=null;
+  let flight=null,flightAnimation=null,panelAnimation=null,panelToken=0,entering=false,manualHold=false,sidebarOrigin=false,overlayLayer=null;
   let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,flightTimer=0,latest=null;
   let updateTimer=0,hideTimer=0,readyObserver=null,layoutObserver=null,initialized=false,hydrating=false;
   let lastDockRect=null,followFrame=0,followUntil=0,overlayUntil=0;
@@ -330,7 +330,7 @@
     node.addEventListener("click",()=>{
       cancelFlight();
       if(dockOpen||cardOpen&&manualHold)closeDock();
-      else if(cardOpen)pinPanel();
+      else if(cardOpen)pinPanel(true);
       else openCard(true);
     });
     buildDock();
@@ -456,7 +456,7 @@
     dock.inert=true;dock.setAttribute("aria-hidden","true");
     node?.setAttribute("aria-expanded","false");updateLive();
     if(restoreFocus&&visible(node))node.focus?.({preventScroll:true});
-    const done=()=>{dock?.removeAttribute("data-closing");manualHold=false;syncSidebarHold();};
+    const done=()=>{dock?.removeAttribute("data-closing");manualHold=false;sidebarOrigin=false;syncSidebarHold();};
     if(!g||progress<=0){done();return;}
     const reverse=reverseWave(g.frames,progress);
     const start=progress<1&&startClip.startsWith("path(")?
@@ -478,6 +478,8 @@
   function openDock(){
     if(!dock||dead||dockOpen)return;
     cancelHide();cancelFlight();
+    // Full mode pins the downloads surface but must not acquire a native
+    // sidebar hold. Preserve its original opening source.
     manualHold=true;
     const wasRecent=cardOpen;
     const before=wasRecent?{height:dock.offsetHeight,listY:dockList.getBoundingClientRect().top}:null;
@@ -610,22 +612,25 @@
   function syncSidebarHold(){
     // Zen watches native sidebar descendants with [panelopen] and
     // owns zen-compact-mode-active. We own only our button's attribute.
-    const hold=!dead&&manualHold&&!!node?.hasAttribute("data-zr-native")&&!!(cardOpen||dockOpen||dock?.hasAttribute("data-closing"));
+    const hold=!dead&&sidebarOrigin&&!!node?.hasAttribute("data-zr-native")&&!!(cardOpen||dockOpen||dock?.hasAttribute("data-closing"));
     if(node&&node.hasAttribute("panelopen")!==hold)node.toggleAttribute("panelopen",hold);
   }
   function updateLive(){
     node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||dockOpen||!!flight);
     syncSidebarHold();
   }
-  function pinPanel(){
+  function pinPanel(fromIndicator=false){
     if(!cardOpen&&!dockOpen)return;
-    manualHold=true;cancelHide();syncSidebarHold();follow(800);
+    // A click inside an auto notification pins only the downloads surface.
+    // Only an explicit indicator click is allowed to acquire the sidebar.
+    manualHold=true;if(fromIndicator)sidebarOrigin=true;
+    cancelHide();syncSidebarHold();follow(800);
   }
   function openCard(manual=false){
     if(!dock||!node||dead||dockOpen)return;
-    if(cardOpen){if(manual)pinPanel();renderRecent();armHide();return;}
+    if(cardOpen){if(manual)pinPanel(true);renderRecent();armHide();return;}
     if(!manual&&dock.hasAttribute("data-closing"))return;
-    cancelHide();cancelPanel();dock.removeAttribute("data-closing");manualHold=manual;
+    cancelHide();cancelPanel();dock.removeAttribute("data-closing");manualHold=manual;sidebarOrigin=manual;
     dockNotice.textContent="";setPanelMode(false);syncTheme(dock);updateLive();
     const g=positionOverlays();
     dock.setAttribute("data-open","true");dock.setAttribute("aria-hidden","false");dock.inert=false;
@@ -725,7 +730,7 @@
   function removed(d){if(history.delete(d)){historyOrder=null;recentOrder=null;}if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen||cardOpen)schedule();}
   function teardown(){
     ++epoch;
-    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();cancelPanel();cardOpen=dockOpen=false;manualHold=false;dock?.removeAttribute("data-closing");syncSidebarHold();stopFollow();overlayUntil=0;
+    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();cancelPanel();cardOpen=dockOpen=false;manualHold=false;sidebarOrigin=false;dock?.removeAttribute("data-closing");syncSidebarHold();stopFollow();overlayUntil=0;
     if(layoutFrame)window.cancelAnimationFrame(layoutFrame);layoutFrame=0;
     resizeObserver?.disconnect();resizeObserver=null;observedSidebar=anchor=null;
     if(list&&view)try{list.removeView(view);}catch{}

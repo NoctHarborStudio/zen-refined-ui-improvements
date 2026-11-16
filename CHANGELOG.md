@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.13
+
+- Separate downloads persistence from native sidebar ownership. Clicking an automatic notification, file row or All downloads keeps the downloads surface open without opening Compact Mode; only the sidebar indicator can acquire its hold.
+
 ## 0.6.0-preview.12
 
 - Mask the fluid wave and flight at the native sidebar edge so they emerge from behind it; use a circular seed with bounded cubic control points.

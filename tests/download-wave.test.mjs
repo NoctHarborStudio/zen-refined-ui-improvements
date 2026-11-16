@@ -25,14 +25,14 @@ test("close exactly reverses opening keyframes",()=>{
 });
 test("native hold survives closing, and releases only own attribute",()=>{
  const run=new Function(`${section("function syncSidebarHold()","function updateLive()")}
- let dead=false,cardOpen=false,dockOpen=false,closing=false,manualHold=false;
+ let dead=false,cardOpen=false,dockOpen=false,closing=false,manualHold=false,sidebarOrigin=false;
  const attrs=new Set(["data-zr-native","unrelated"]);
  const node={hasAttribute:k=>attrs.has(k),toggleAttribute:(k,on)=>on?attrs.add(k):attrs.delete(k)};
  const dock={hasAttribute:k=>k==="data-closing"&&closing};
  const states=[];const sample=()=>{syncSidebarHold();states.push(attrs.has("panelopen"));};
- sample();cardOpen=true;sample();manualHold=true;sample();cardOpen=false;dockOpen=true;sample();dockOpen=false;closing=true;sample();closing=false;manualHold=false;sample();cardOpen=true;sample();manualHold=true;sample();dead=true;sample();
+ sample();cardOpen=true;sample();manualHold=true;sample();cardOpen=false;dockOpen=true;sample();dockOpen=false;closing=true;sample();closing=false;manualHold=false;sample();cardOpen=true;manualHold=true;sidebarOrigin=true;sample();cardOpen=false;dockOpen=true;sample();dockOpen=false;closing=true;sample();closing=false;sidebarOrigin=false;sample();cardOpen=true;sidebarOrigin=true;sample();dead=true;sample();
  return {states,unrelated:attrs.has("unrelated")};`);
- assert.deepEqual(run(),{states:[false,false,true,true,true,false,false,true,false],unrelated:true});
+ assert.deepEqual(run(),{states:[false,false,false,false,false,false,true,true,true,false,true,false],unrelated:true});
 });
 
 test("sidebar mask is mirrored and absent for a hosted indicator",()=>{
@@ -46,4 +46,17 @@ test("first visible seed is a circle, before growth",()=>{
  const {g}=geometry({side:"right",x:800,y:31,seedW:19,seedH:19},430,380,330,12);
  assert.equal(g.frames[0].clipPath,g.frames[1].clipPath);
  assert.equal(g.frames[1].opacity,1);
+});
+
+test("pinning from a download row does not acquire the sidebar",()=>{
+ const run=new Function(`${section("function syncSidebarHold()","function updateLive()")}${section("function pinPanel(","function openCard(")}
+ let dead=false,cardOpen=true,dockOpen=false,manualHold=false,sidebarOrigin=false;
+ const attrs=new Set(["data-zr-native"]);
+ const node={hasAttribute:k=>attrs.has(k),toggleAttribute:(k,on)=>on?attrs.add(k):attrs.delete(k)};
+ const dock={hasAttribute:()=>false};function cancelHide(){}function follow(){}
+ pinPanel();const fromRow={pinned:manualHold,sidebar:attrs.has("panelopen")};
+ pinPanel(true);const fromIndicator={pinned:manualHold,sidebar:attrs.has("panelopen")};
+ pinPanel();const preserved=attrs.has("panelopen");
+ return {fromRow,fromIndicator,preserved};`);
+ assert.deepEqual(run(),{fromRow:{pinned:true,sidebar:false},fromIndicator:{pinned:true,sidebar:true},preserved:true});
 });
