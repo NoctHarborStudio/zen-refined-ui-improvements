@@ -41,7 +41,7 @@
     cover?.remove();pageVeil?.remove();style?.remove();
     root.removeAttribute(PHASE);holdNode?.removeAttribute(HOLD);
     for(const type of inputs)window.removeEventListener(type,interrupt,true);
-    window.removeEventListener("resize",interrupt);
+    window.removeEventListener("resize",onResize);
     window.removeEventListener("unload",finish);
     window.removeEventListener("OnePlane:StartupState",schedule);
     reduced.removeEventListener("change",preferenceChanged);
@@ -49,6 +49,7 @@
     if(window[KEY]===finish)delete window[KEY];
   }
   function interrupt(){finish();}
+  function onResize(){if(playing)finish();}
   function preferenceChanged(){if(reduced.matches||!prefs.getBoolPref(ENABLE,true))finish();}
   function veil(id){
     const n=html("div");n.id=id;n.setAttribute("aria-hidden","true");
@@ -62,20 +63,24 @@
   function bounds(n){
     if(!n||n.hidden||n.collapsed)return null;
     const s=window.getComputedStyle(n),r=n.getBoundingClientRect();
-    return s.display!=="none"&&s.visibility!=="hidden"&&r.width>1&&r.height>1&&
+    return s.display!=="none"&&s.visibility!=="hidden"&&Number(s.opacity)!==0&&r.width>1&&r.height>1&&
       r.right>0&&r.left<window.innerWidth&&r.bottom>0&&r.top<window.innerHeight?r:null;
   }
-  function play(n,frames,delay,length,extra={}){
+  function play(n,frames,delay,length,retain=false){
     if(!n)return;
     try{
-      const a=n.animate(frames,{delay:delay*scale,duration:length*scale,easing:EASE,fill:"both",...extra});
+      const a=n.animate(frames,{delay:delay*scale,duration:length*scale,easing:EASE,fill:"both"});
       animations.add(a);
+      // Release the native control immediately at its own endpoint. A
+      // retained clip could clip its popover or focus outline until the
+      // whole timeline ends. Only veils retain their transparent state.
+      if(!retain)a.finished?.then(()=>{if(animations.delete(a))a.cancel();},()=>{});
     }catch(error){console.warn("[Zen Refined] Startup animation effect:",error);}
   }
   function slide(n,x,y,delay,length,opacity=true){
     // Independent translate avoids replacing an existing native transform.
     const a={translate:x+"px "+y+"px"},b={translate:"0px 0px"};
-    if(opacity){a.opacity=0;b.opacity=1;}
+    if(opacity){a.opacity=0;b.opacity=Number(window.getComputedStyle(n).opacity)||1;}
     play(n,[a,b],delay,length);
   }
   function openFromCenter(n,delay,length){
@@ -86,7 +91,7 @@
   function collectTabs(row,center){
     const list=row.querySelector(".oneplane-tab-list"),units=[];
     if(!list)return units;
-    for(const n of list.querySelectorAll(".oneplane-tab,.oneplane-split-group,.oneplane-title-island")){
+    for(const n of list.querySelectorAll(".oneplane-tab,.oneplane-split-group")){
       if(n.classList.contains("oneplane-tab")&&n.closest(".oneplane-split-group"))continue;
       const r=bounds(n);if(!r)continue;
       // Avoid animating offscreen tabs in a scroll lane.
@@ -105,7 +110,8 @@
       const floating=bar?.getAttribute("zen-floating-urlbar")==="true"||bar?.hasAttribute("zen-newtab");
       const page=get("tabbrowser-tabpanels")||get("tabbrowser-tabbox");
       const ur=bounds(url),nr=bounds(nav),br=bounds(bookmarks),rr=one?bounds(row):null;
-      const center=one&&rr?rr.left+rr.width/2:ur?ur.left+ur.width/2:window.innerWidth/2;
+      const island=one?row?.querySelector(".oneplane-title-island"):null,ir=bounds(island);
+      const center=ir?ir.left+ir.width/2:one&&rr?rr.left+rr.width/2:ur?ur.left+ur.width/2:window.innerWidth/2;
       // Read all geometry before effects start. The content veil is clipped
       // below the real toolbar; top chrome remains visible as it assembles.
       const bottom=Math.min(window.innerHeight,Math.max(nr?.bottom||0,br?.bottom||0,rr?.bottom||0));
@@ -114,7 +120,7 @@
       const top=Math.max(0,bottom,pr?.top||0);
       pageVeil.style.setProperty("clip-path","inset("+top+"px 0 0 0)","important");
       root.setAttribute(PHASE,"playing");
-      if(ur)openFromCenter(url,40,270);
+      if(ur&&(!floating||url.hasAttribute("data-op-empty")))openFromCenter(url,40,270);
       if(one&&rr){
         const tabs=collectTabs(row,center),far=Math.max(1,...tabs.map(x=>x.distance));
         for(const t of tabs){
@@ -124,7 +130,7 @@
           slide(t.n,dx,0,125+Math.min(105,t.distance/far*105),290);
         }
         const plus=row.querySelector(".oneplane-new-tab");if(bounds(plus))slide(plus,-26,0,265,240);
-        const island=row.querySelector(".oneplane-title-island");if(bounds(island))openFromCenter(island,100,300);
+        if(ir)openFromCenter(island,40,270);
         const target=get("nav-bar-customization-target");
         for(const n of Array.from(target?.children||[])){
           if(n===row||n===url||n.localName==="toolbarspring"||n.id?.startsWith("oneplane-center-")||!bounds(n))continue;
@@ -152,8 +158,8 @@
       if(floating&&bounds(bar))openFromCenter(bar,425,310);
       // Background reveals first; content stays veiled until chrome is in
       // motion. Nothing waits for network loads, remote DOM or a page FCP.
-      play(pageVeil,[{opacity:1},{opacity:0}],390,340);
-      play(cover,[{opacity:1},{opacity:0}],0,130);
+      play(pageVeil,[{opacity:1},{opacity:0}],390,340,true);
+      play(cover,[{opacity:1},{opacity:0}],0,130,true);
       timer=window.setTimeout(finish,duration+90);
     }catch(error){console.warn("[Zen Refined] Startup reveal failed:",error);finish();}
   }
@@ -175,8 +181,8 @@
     // OnePlane versions are accepted if already active and visible.
     if(state==="pending"||(expected&&!active&&state!=="true")){schedule();return;}
     if(!expected&&now()-readyAt<120){schedule();return;}
-    if(active&&state==="true"&&root.getAttribute("zen-compact-mode")==="true"&&!holdNode?.hasAttribute("data-op-panel-open")){schedule();return;}
-    const one=Boolean(active&&bounds(row));
+    if(active&&state==="true"&&window.innerWidth>=900&&root.getAttribute("zen-compact-mode")==="true"&&!holdNode?.hasAttribute("data-op-panel-open")){schedule();return;}
+    const one=Boolean(active&&bounds(row)&&window.innerWidth>=900&&(root.getAttribute("zen-compact-mode")!=="true"||holdNode?.hasAttribute("data-op-panel-open")));
     // A narrow/hidden legacy strip falls back to native UI, never forces
     // a layout preference. With pending integration, fail open on timeout.
     if(!get("nav-bar")&&!get("navigator-toolbox")){schedule();return;}
@@ -197,7 +203,7 @@
     window[KEY]?.();window[KEY]=finish;
     window.addUnloadListener(finish);window.addEventListener("unload",finish,{once:true});
     for(const type of inputs)window.addEventListener(type,interrupt,true);
-    window.addEventListener("resize",interrupt);
+    window.addEventListener("resize",onResize);
     window.addEventListener("OnePlane:StartupState",schedule);
     reduced.addEventListener("change",preferenceChanged);
     prefs.addObserver(ENABLE,preferenceChanged);
