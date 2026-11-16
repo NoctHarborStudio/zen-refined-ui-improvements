@@ -31,7 +31,7 @@ function install() {
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
   let leaveTimer=0, flipTimer=0, flipEpoch=0, motionPlan=null, contourFrame=0, contourSurface=null, contourKey="";
-  const flips=new Map(), flipNodes=new Set();
+  const flips=new Map(), flipNodes=new Set(), scaledParents=new Set();
   let pointerFrame=0,pendingPointer=null,lastIndicatorTransform="",lastPointer=null;
   const FLIP_EASE="cubic-bezier(.333333,0,.666667,1)";
   let baseHeight=0,basePadding=0,reserve=0;
@@ -234,7 +234,7 @@ function install() {
     for(const a of flips.values())try{a.cancel();}catch{}
     flips.clear();
     for(const n of flipNodes)n.removeAttribute("data-zr-bm-flip");
-    flipNodes.clear();
+    flipNodes.clear();scaledParents.clear();
   }
   function resetActive(){
     for(const item of state.keys()){
@@ -259,12 +259,44 @@ function install() {
   function transform(dx,dy,sx=1,sy=1){
     return "translate3d("+dx.toFixed(4)+"px,"+dy.toFixed(4)+"px,0) scale("+sx.toFixed(6)+","+sy.toFixed(6)+")";
   }
+  function pixelRatio(){const n=Number(window.devicePixelRatio);return Number.isFinite(n)&&n>0?n:1;}
+  function snapOffset(n){const d=pixelRatio();return Math.round(n*d)/d;}
+  function snapGrowth(n){
+    // Each margin is a whole device pixel. A centered row therefore moves
+    // by a whole pixel too, where its native layout permits this.
+    const d=pixelRatio();return Math.max(0,Math.floor(n*d/2+1e-7)*2/d);
+  }
+  function translation(dx,dy){
+    const x=snapOffset(dx),y=snapOffset(dy);
+    // Do not attach identity scaling or a 3D transform to ordinary labels.
+    if(x===0&&y===0)return "none";
+    return y===0?"translateX("+x+"px)":"translate("+x+"px,"+y+"px)";
+  }
+  function isIdentity(t){
+    if(!t||t==="none")return true;
+    const m=/^(matrix|matrix3d|scale)\(([^)]+)\)$/.exec(t.trim());if(!m)return false;
+    const a=m[2].split(/[,\s]+/).filter(Boolean).map(Number);
+    const identity=m[1]==="matrix"?[1,0,0,1,0,0]:m[1]==="matrix3d"?[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]:a.length===1?[1]:[1,1];
+    return a.length===identity.length&&a.every((v,i)=>Number.isFinite(v)&&Math.abs(v-identity[i])<.00001);
+  }
   function play(node,from,to,duration){
-    if(!duration||from===to)return;
+    if(!duration||from===to||(isIdentity(from)&&isIdentity(to)))return false;
     try{
       const a=node.animate([{transform:from},{transform:to}],{duration,easing:FLIP_EASE,fill:"both"});
       flips.set(node,a);
-    }catch{}
+      const epoch=flipEpoch;
+      // Remove the animation effect as soon as it actually finishes, not
+      // one frame (or a fixed grace period) later. Resting text is native.
+      a.finished?.then(()=>{
+        if(epoch!==flipEpoch||flips.get(node)!==a)return;
+        flips.delete(node);
+        try{a.cancel();}catch{}
+        if(flipNodes.delete(node))node.removeAttribute("data-zr-bm-flip");
+        scaledParents.delete(node);
+        if(!flips.size)endFlip(epoch);
+      },()=>{});
+      return true;
+    }catch{return false;}
   }
   function endFlip(epoch){
     if(epoch!==flipEpoch)return;
@@ -274,17 +306,17 @@ function install() {
   function retarget(){
     // FIRST: capture painted positions, including interrupted WAAPI motion.
     // No stylesheet or layout mutations in this read phase.
-    const nodes=visibleRow(),first=new Map(),inners=new Map(),innerParents=new Set();
+    const nodes=visibleRow(),first=new Map(),inners=new Map();
+    const formerlyScaled=new Set([...state.keys(),...scaledParents]);
     const firstToolbar=box(toolbar.getBoundingClientRect());
     for(const n of nodes){
       const r=box(n.getBoundingClientRect());
       if(r.width>0&&r.height>0)first.set(n,r);
-      if(n===active||state.has(n)||flipNodes.has(n)){
-        innerParents.add(n);
-        for(const ch of innerNodes(n)){
-          const t=window.getComputedStyle(ch).transform;
-          inners.set(ch,t&&t!=="none"?t:"scale(1,1)");
-        }
+      // Capture child transforms only for a new/previous enlarged card.
+      // Translation-only siblings must never get child identity animations.
+      if(n===active||formerlyScaled.has(n))for(const ch of innerNodes(n)){
+        const t=window.getComputedStyle(ch).transform;
+        if(!isIdentity(t))inners.set(ch,t);
       }
     }
     // Reset the old slot and animation before reading resting metrics.
@@ -303,7 +335,7 @@ function install() {
     // The previous slot is already gone; two expanded slots cannot
     // temporarily overrun the native Places overflow budget.
     let target=null;
-    if(active){toolbar.setAttribute("data-zr-bm-room","true");target=setActive(active,m,Math.min(m.width*(settings.scale-1),budget));}
+    if(active){toolbar.setAttribute("data-zr-bm-room","true");target=setActive(active,m,snapGrowth(Math.min(m.width*(settings.scale-1),budget)));}
     else toolbar.setAttribute("data-zr-bm-room","true");
     const lastToolbar=box(toolbar.getBoundingClientRect()),last=new Map();
     for(const n of nodes){const r=box(n.getBoundingClientRect());if(r.width>0&&r.height>0)last.set(n,r);}
@@ -322,18 +354,27 @@ function install() {
         motionPlan={start,duration,from:f,to:{left:l.left+b.width*(1-ex)/2,top:l.top,width:b.width*ex,height:b.height*ey},
           originX:lastToolbar.left+toolbar.clientLeft,height:lastToolbar.height};
       }
-      const moving=Math.abs(tx)+Math.abs(ty)+Math.abs(sx-ex)*b.width+Math.abs(sy-ey)*b.height>.05;
+      // Only the incoming enlarged card and cards still shrinking from a
+      // previous enlargement may scale. All other siblings translate in 2D.
+      const scaling=isActive||(formerlyScaled.has(n)&&(Math.abs(sx-1)*b.width+Math.abs(sy-1)*b.height>.05));
+      const from=scaling?transform(tx,ty,sx,sy):translation(a.left-b.left,ty);
+      const to=scaling?transform(0,0,ex,ey):"none";
+      const moving=scaling?Math.abs(tx)+Math.abs(ty)+Math.abs(sx-ex)*b.width+Math.abs(sy-ey)*b.height>.05:from!=="none";
       if(duration&&moving){
         n.setAttribute("data-zr-bm-flip","true");flipNodes.add(n);
-        play(n,transform(tx,ty,sx,sy),transform(0,0,ex,ey),duration);
+        if(play(n,from,to,duration)){if(scaling)scaledParents.add(n);}
+        else{flipNodes.delete(n);n.removeAttribute("data-zr-bm-flip");}
       }
-      if(isActive||innerParents.has(n))for(const ch of innerNodes(n)){
-        if(!isActive&&!inners.has(ch))continue;
+      if(isActive||formerlyScaled.has(n))for(const ch of innerNodes(n)){
+        const from=inners.get(ch)||"none";
         const ix=isActive?target.inner/ex:1,iy=isActive?target.inner/ey:1;
-        play(ch,inners.get(ch)||"scale(1,1)","scale("+ix+","+iy+")",duration);
+        const to=isActive?"scale("+ix+","+iy+")":"none";
+        if(!isActive&&!inners.has(ch))continue;
+        play(ch,from,to,duration);
       }
     }
-    if(flips.size){const epoch=flipEpoch;flipTimer=window.setTimeout(()=>endFlip(epoch),duration+34);}
+    // Safety cleanup only; normal completion is driven by Animation.finished.
+    if(flips.size){const epoch=flipEpoch;flipTimer=window.setTimeout(()=>endFlip(epoch),duration+250); }
     else{stopFlips();if(!active){toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}}
     return !!active;
   }

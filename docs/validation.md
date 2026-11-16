@@ -34,3 +34,10 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] One final layout per hover retarget; no per-frame margin/CSSOM writes. Interrupted transitions begin from measured visual positions. The previous slot is cleared before allocating a new one.
 - [ ] The liquid indicator uses cached relative geometry and a fixed-size transform, not per-frame getBoundingClientRect or width/height writes.
 - [ ] Check fast retargeting, native folder anchor pause, overflow, reduced motion, drag and unload; verify actual compositor eligibility and FPS in Zen. Stable OnePlane mask remains unchanged; OnePlane itself may still perform its own bounded contour calculations on structural changes.
+
+## Preview.5 — text rasterization
+
+- [ ] Non-enlarged neighbors use only 2D translation, with no forced will-change or descendant animations. Stationary items have no animation effect.
+- [ ] Only currently or previously enlarged cards can use scaling. Retargets preserve in-flight scale on outgoing cards.
+- [ ] Device-pixel-aligned margin growth never exceeds the layout budget. Translation ends at native layout; temporary effects are canceled immediately on Animation.finished, with a bounded watchdog.
+- [ ] Compare native text sharpness during and after hover handoffs on Windows at different DPI settings. Gecko may still change antialiasing on translated content; real compositor testing remains necessary.

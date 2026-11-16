@@ -34,9 +34,8 @@
   transform-origin: center top !important;
   transition: background-color 180ms ease, box-shadow 180ms ease !important;
 }
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip] {
-  will-change: transform;
-}
+/* Let Gecko choose compositing for moving bookmarks. Forcing a layer on
+ * every neighbor can change text antialiasing even at identity scale. */
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
   position: relative;
   flex-shrink: 0 !important;
