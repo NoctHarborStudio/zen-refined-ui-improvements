@@ -22,9 +22,13 @@
   // A late loader cannot conceal an already-displayed interface seamlessly.
   if(typeof window.addUnloadListener!=="function"||window[SEEN]||root.hasAttribute("popup-window"))return;
   window[SEEN]=true;
-  if(!prefs.getBoolPref(ENABLE,true)||reduced.matches||now()>4000||window.closed||
+  function startupEligible(painted,delayed,oneState,age){
+    return age<6500&&(!painted||!delayed||oneState==="pending");
+  }
+  let lateStart=!canStartBeforePaint(window.windowUtils,document.readyState);
+  if(!prefs.getBoolPref(ENABLE,true)||reduced.matches||window.closed||
       root.hasAttribute("customizing")||root.getAttribute("inDOMFullscreen")==="true"||
-      !canStartBeforePaint(window.windowUtils,document.readyState))return;
+      !startupEligible(lateStart,window.gBrowserInit?.delayedStartupFinished,root.getAttribute(READY),now()))return;
   // Sine saves the previous default as a user value. Upgrade that exact
   // 760ms default once; preserve every other choice, and allow users to
   // select 760ms again after the migration.
@@ -37,10 +41,11 @@
   }catch{}
   const duration=Math.max(400,Math.min(1500,prefs.getIntPref(DURATION,1050)));
   const scale=duration/1050;
-  const started=now(),deadline=started+1600;
+  const started=now(),deadline=started+5000;
   let dead=false,playing=false,settling=false,raf=0,timer=0,settled=false,nativeReady=false,readyAt=0,holdNode=null;
   let nativeObserver=null,style=null,lateObserver=null,lateResize=null,lateFrame=0,playStart=0,finishAt=0,sheetURI=null;
-  const animations=new Map(),owned=new Map(),seen=new Set();
+  const animations=new Map(),owned=new Map(),seen=new Set(),baseline=new Set();
+  const EXISTING="data-zr-startup-existing";
   const MANAGED="data-zr-startup-managed",EFFECT="data-zr-startup-effect",MOVE="data-zr-startup-move",CLIP="data-zr-startup-clip",PROGRESS="--zr-startup-progress";
   let registered=false;
   try{window.CSS.registerProperty({name:PROGRESS,syntax:"<number>",inherits:false,initialValue:"1"});registered=true;}
@@ -68,6 +73,7 @@
     for(const n of [...owned.keys()])restore(n);
     for(const n of seen)n.removeAttribute(MANAGED);
     seen.clear();
+    for(const n of baseline)n.removeAttribute(EXISTING);baseline.clear();
     if(sheetURI)try{window.windowUtils.removeSheet(sheetURI,window.windowUtils.USER_SHEET);}catch{}
     sheetURI=null;
     style?.remove();
@@ -152,6 +158,9 @@
     const cs=window.getComputedStyle(n),opacity=Number(cs.opacity);
     if(!Number.isFinite(opacity)||opacity<=0){n.removeAttribute(MANAGED);return false;}
     seen.add(n);
+    const alreadyPainted=baseline.has(n)||late&&!clip&&!n.matches?.("#PlacesToolbarItems > *");
+    const initial=alreadyPainted?.72:0;
+    if(alreadyPainted)clip=false;
     const nativeTranslate=cs.translate||"none";
     const canMove=nativeTranslate==="none"||/^0(?:px|%)?(?: 0(?:px|%)?){0,2}$/.test(nativeTranslate);
     // Do not replace a nonzero native translation (notably the floating
@@ -172,10 +181,10 @@
       n.setAttribute(EFFECT,"true");
       if(x||y){save(n,"--zr-startup-dx",x+"px");save(n,"--zr-startup-dy",y+"px");n.setAttribute(MOVE,"true");}
       if(clip)n.setAttribute(CLIP,"true");
-      if(!play(n,[{[PROGRESS]:"0"},{[PROGRESS]:"1"}],start,time,false,easing,()=>restore(n)))restore(n);
+      if(!play(n,[{[PROGRESS]:String(initial)},{[PROGRESS]:"1"}],start,time,false,easing,()=>restore(n)))restore(n);
     }else{
-      const from={opacity:0},to={opacity};
-      if(x||y){from.translate=x+"px "+y+"px";to.translate="0px 0px";}
+      const from={opacity:opacity*initial},to={opacity};
+      if(x||y){from.translate=x*(1-initial)+"px "+y*(1-initial)+"px";to.translate="0px 0px";}
       if(clip){from.clipPath="inset(0 49% 0 49% round 8px)";to.clipPath="inset(-8px round 8px)";}
       play(n,[from,to],start,time,false,easing);
     }
@@ -245,7 +254,9 @@
       const bar=floatingBar();
       if(bar&&!seen.has(bar))openFromCenter(bar,590,440,true);
       revealBookmarks(window.innerWidth/2,true);
-      // Other controls were sampled at launch. Never replay a visible toolbar button.
+      const row=get("oneplane-tabs"),url=get("urlbar-container"),center=window.innerWidth/2;
+      controls(row,url,center,true);
+      if(row&&root.getAttribute("oneplane-active")==="true")for(const t of collectTabs(row,center))if(!seen.has(t.n))reveal(t.n,{x:Math.max(-360,Math.min(360,center-t.mid)),delay:155,length:435,late:true});
     });
   }
   function collectTabs(row,center){
@@ -253,7 +264,7 @@
     if(!list)return units;
     for(const n of list.querySelectorAll(".oneplane-tab,.oneplane-split-group")){
       if(n.classList.contains("oneplane-tab")&&n.closest(".oneplane-split-group"))continue;
-      const r=bounds(n);if(!r)continue;
+      const r=bounds(n,true);if(!r)continue;
       // Avoid animating offscreen tabs in a scroll lane.
       const lane=n.closest(".oneplane-island-lane")||list,lr=lane.getBoundingClientRect();
       if(r.right<=lr.left||r.left>=lr.right)continue;
@@ -338,6 +349,7 @@
     // a layout preference. With pending integration, fail open on timeout.
     if(!get("nav-bar")&&!get("navigator-toolbox")){schedule();return;}
     if(timer)window.clearTimeout(timer);
+    console.info("[Zen Refined] Center Assembly launch: "+(one?"OnePlane":"native"));
     launch(one);
   }
   function onNativeReady(){
@@ -379,11 +391,11 @@
       "#zen-sidebar-top-buttons :is(toolbarbutton,button,.titlebar-button,[role=button])",
       ":is(#titlebar-buttonbox,#titlebar-buttonbox-container,#zen-window-controls,.titlebar-buttonbox-container) .titlebar-button"
     ];
-    const waitingGate=earlyTargets.map(s=>waiting+" "+s+":not([data-zr-startup-managed])"+gate).join(",\n");
+    const waitingGate=earlyTargets.map(s=>waiting+" "+s+":not([data-zr-startup-managed],[data-zr-startup-existing])"+gate).join(",\n");
     const cssText=`
       ${waitingGate},
-      ${active} #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed])${gate},
-      ${active} #PlacesToolbarItems > :not([data-zr-startup-managed])${gate} {
+      ${active} #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed],[data-zr-startup-existing])${gate},
+      ${active} #PlacesToolbarItems > :not([data-zr-startup-managed],[data-zr-startup-existing])${gate} {
         opacity: 0 !important;
         transition-property: none !important;
       }
@@ -405,9 +417,12 @@
     }catch{
       sheetURI=null;style=html("style");style.textContent=cssText;root.append(style);
     }
-    // A stylesheet registration must not introduce a late gate either.
-    if(!canStartBeforePaint(window.windowUtils,document.readyState)){finish();return;}
+    // Already-painted controls are never hidden by a late loader. Newly
+    // inserted controls remain eligible for the full center reveal.
+    lateStart=lateStart||!canStartBeforePaint(window.windowUtils,document.readyState);
+    if(lateStart)for(const selector of earlyTargets)for(const n of document.querySelectorAll(selector))if(!baseline.has(n)){baseline.add(n);n.setAttribute(EXISTING,"true");}
     root.setAttribute(PHASE,"waiting");hold();
+    console.info("[Zen Refined] Center Assembly: "+(lateStart?"late chrome startup":"prepaint startup"));
     timer=window.setTimeout(finish,Math.max(0,deadline-now()));
     if(window.gBrowserInit?.delayedStartupFinished)onNativeReady();
     else{nativeObserver=subject=>{if(subject!==window)return;Services.obs.removeObserver(nativeObserver,"browser-delayed-startup-finished");nativeObserver=null;onNativeReady();};

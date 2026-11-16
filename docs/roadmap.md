@@ -109,3 +109,7 @@ Preview.21 grouped visual layout and timeline accepted in Zen/OnePlane. User rep
 ## Preview.23 — Smart Search timing polish
 
 User reports the rest of the Smart Search UI looks good. Slow timeline travel by 2.5×, preserving its sequential columns. Verify the final timing in Zen; no other runtime changes.
+
+## Preview.24 — Center Assembly recovery and workspace transition
+
+Allow late initial chrome startup, not established-window replay; mark previously painted controls and use a partial reveal instead of hiding them. Wait up to five seconds for OnePlane and animate late controls. Introduce explicit workspace transition API for Home/Hub with native switch ownership and bounded bookmark settlement. No full-window or page veil. OnePlane contour hold and Home keyed state updates require companion integration. Validate cold startup, projection, Home startup, repeated switching, reduced motion and unloading. Native background flicker is not confirmed fixed.

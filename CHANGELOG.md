@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0-preview.24
+
+- Restore Center Assembly for late initial chrome startup without hiding already painted controls; extend readiness deadline to five seconds and include late toolbar controls/tabs. No full-window overlay.
+- Add optional shared workspace transition controller for Home and Hub: collapse old chrome toward center, native switch, bounded Places settlement, reveal new chrome. Native page and background remain untouched; OnePlane integration required for explicit callers.
+
 ## 0.6.0-preview.23
 
 - Slow the Smart Search timeline dot travel by 2.5×: 850ms per column instead of 340ms, preserving sequential timing, existing easing, layout and reduced-motion behavior. No search logic changes.

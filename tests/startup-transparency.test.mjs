@@ -25,3 +25,15 @@ test("interruption samples current progress and settles before cleanup",()=>{
  'let dead=false,playing=true,settling=false,lateObserver=null,lateResize=null,lateFrame=0,timer=0;const reduced={matches:false},PHASE="phase",FADE="ease",root={setAttribute(){}},log=[];const a={cancel(){log.push("cancel");}},n={},complete=()=>{};const animations=new Map([[a,{n,frames:[{"--p":"0"},{"--p":"1"}],complete}]]);const window={getComputedStyle(){return {getPropertyValue(){return ".37"}}},setTimeout(fn,t){log.push(t);return 1},clearTimeout(){}};function play(n,f,d,t){log.push(f[0]["--p"],f[1]["--p"],t);return true}function finish(){log.push("finish")}settle();settle();return log;');
  assert.deepEqual(run(),["cancel",".37","1",120,155]);
 });
+
+test("late startup allowed only during initial chrome setup; established windows never replay",()=>{
+ const i=source.indexOf("function startupEligible("),j=source.indexOf("let lateStart",i);
+ const eligible=new Function(source.slice(i,j)+"return startupEligible;")();
+ assert.equal(eligible(true,false,null,900),true);
+ assert.equal(eligible(true,true,"pending",4000),true);
+ assert.equal(eligible(true,true,"true",1000),false);
+ assert.equal(eligible(true,false,null,6500),false);
+ assert.ok(source.includes("deadline=started+5000"));
+ assert.ok(source.includes("baseline.add(n)"));
+ assert.ok(source.includes("alreadyPainted?.72:0"));
+});

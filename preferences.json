@@ -158,5 +158,11 @@
     "property": "zen.refined.smart-search.enabled",
     "label": "Smart Search — recent active tabs",
     "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.workspace.transition",
+    "label": "Center workspace transition (Home and Hub)",
+    "defaultValue": true
   }
 ]
