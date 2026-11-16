@@ -343,8 +343,8 @@
     // OnePlane versions are accepted if already active and visible.
     if(state==="pending"||(expected&&!active&&state!=="true")){schedule();return;}
     if(!expected&&now()-readyAt<120){schedule();return;}
-    if(active&&state==="true"&&window.innerWidth>=900&&root.getAttribute("zen-compact-mode")==="true"&&!holdNode?.hasAttribute("data-op-panel-open")){schedule();return;}
-    const one=Boolean(active&&bounds(row)&&window.innerWidth>=900&&(root.getAttribute("zen-compact-mode")!=="true"||holdNode?.hasAttribute("data-op-panel-open")));
+    if(active&&state==="true"&&root.getAttribute("zen-compact-mode")==="true"&&!holdNode?.hasAttribute("data-op-panel-open")){schedule();return;}
+    const one=Boolean(active&&bounds(row)&&(root.getAttribute("zen-compact-mode")!=="true"||holdNode?.hasAttribute("data-op-panel-open")));
     // A narrow/hidden legacy strip falls back to native UI, never forces
     // a layout preference. With pending integration, fail open on timeout.
     if(!get("nav-bar")&&!get("navigator-toolbox")){schedule();return;}

@@ -129,7 +129,7 @@ function install() {
     if(dead||addressSuspended||root.hasAttribute("data-op-bookmark-wave"))return;
     const surface=document.getElementById("oneplane-toolbar-surface"),row=document.getElementById("oneplane-tabs");
     if(!settings.enabled||!settings.stableBackground||!root.hasAttribute("oneplane-active")||
-      root.getAttribute("zen-compact-mode")!=="true"||window.innerWidth<900||
+      root.getAttribute("zen-compact-mode")!=="true"||row?.getAttribute("data-ready")!=="true"||
       !wrapper||!surface||!row||toolbar.hidden||toolbar.collapsed||root.hasAttribute("customizing")||
       root.hasAttribute("inDOMFullscreen")){
       releaseContour();return;

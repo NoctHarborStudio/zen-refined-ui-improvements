@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.26
+
+- Support OnePlane's adaptive centered two-row tab strip at narrow window widths. Shared Magnetic Bookmarks reads the complete native toolbar geometry and keeps the same contour and wave at any supported width. Startup and workspace animations use the active OnePlane mirror instead of the hidden Zen sidebar. Native Zen runtime validation pending.
+
 ## 0.6.0-preview.25
 
 - Harden Center Workspace Transition against overlapping workspace requests and slow native promises. A newer request cancels the older delayed selection; a 2.5s watchdog always releases the visual gate. Add runtime-shaped lifecycle tests for phase ordering, cleanup and fallback.

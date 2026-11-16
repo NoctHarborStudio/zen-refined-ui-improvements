@@ -147,7 +147,7 @@
 /* Integration with OnePlane: use a stable mask calculated from the
  * resting row. Match its complete activation selector and override only
  * the surface mask/height, not its tint, blur, panel motion or controls. */
-@media (min-width: 900px) {
+@media (min-width: 0px) {
   :root[oneplane-active="true"][zen-compact-mode="true"]:not([customizing], [inDOMFullscreen="true"], [inFullscreen="true"], [popup-window]):has(#nav-bar-customization-target > #oneplane-tabs[data-ready="true"])
     #zen-appcontent-navbar-wrapper > #oneplane-toolbar-surface[data-zr-bm-stable-contour] {
     mask-image: var(--zr-bm-contour-mask) !important;
@@ -156,7 +156,7 @@
   }
 }
 
-@media (min-width: 900px) and (prefers-reduced-transparency: reduce) {
+@media (min-width: 0px) and (prefers-reduced-transparency: reduce) {
   :root[oneplane-active="true"][zen-compact-mode="true"]:not([customizing], [inDOMFullscreen="true"], [inFullscreen="true"], [popup-window]):has(#nav-bar-customization-target > #oneplane-tabs[data-ready="true"])
     #zen-appcontent-navbar-wrapper > #oneplane-toolbar-surface[data-zr-bm-stable-contour] {
     mask-image: none !important;

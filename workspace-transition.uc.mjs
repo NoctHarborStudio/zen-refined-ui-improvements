@@ -12,7 +12,7 @@
   function distance(center,mid){return Math.max(-440,Math.min(440,center-mid));}
   function eligible(state){return !state.dead&&!state.busy&&!state.reduced&&!state.startup&&state.enabled&&!state.fullscreen;}
   function units(){
-    const row=get("oneplane-tabs"),one=root.getAttribute("oneplane-active")==="true"&&row?.getAttribute("data-ready")==="true"&&win.innerWidth>=900;
+    const row=get("oneplane-tabs"),one=root.getAttribute("oneplane-active")==="true"&&row?.getAttribute("data-ready")==="true";
     const list=one?row.querySelector(".oneplane-tab-list"):get("tabbrowser-tabs");
     const nodes=one?list?.querySelectorAll(".oneplane-tab,.oneplane-split-group"):list?.querySelectorAll(".tabbrowser-tab:not([zen-essential])");
     const bookmarks=get("PlacesToolbarItems"),out=[];
