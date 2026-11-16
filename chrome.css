@@ -252,7 +252,7 @@
 }
 #zr-page-progress[data-indeterminate] .zr-page-progress-fill { animation:zr-page-unknown 1.8s ease-in-out infinite; }
 @keyframes zr-page-unknown { 0%,100%{opacity:.45} 50%{opacity:1} }
-:root[data-zr-startup-phase] :is(#zr-download-indicator,#zr-download-dock,#zr-download-outside,.zr-download-flight,#zr-page-progress) { visibility:hidden !important; }
+/* Startup never forcibly hides live download/page indicators. */
 @media (prefers-reduced-motion:reduce) {
   #zr-download-indicator,#zr-download-dock,.zr-download-fill,#zr-page-progress,#zr-page-progress .zr-page-progress-fill { transition:none !important;animation:none !important; }
   #zr-download-indicator[data-indeterminate] .zr-download-fill { transform:scaleX(1);opacity:.55; }

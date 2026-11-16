@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0-preview.15
+
+- Remove both opaque startup veils and keep native page, window background and sidebar material visible. Animate individual chrome controls only.
+- Gate startup before Gecko's first chrome paint; skip late startup rather than re-hiding an already painted interface. Bound the readiness wait to 1600ms.
+- Settle interrupted active animations from current computed values over 120ms; do not forcibly hide live download/page indicators during startup.
+- Center Disassembly accepted in user testing, unchanged.
+
 ## 0.6.0-preview.14
 
 - Add optional Center Disassembly for explicit browser close-window commands: bookmarks retreat, OnePlane tabs converge, native controls fade and the address shell contracts over 520ms. Restore chrome before invoking the original native close command; never intercept OS shutdown, global quit or tab close.

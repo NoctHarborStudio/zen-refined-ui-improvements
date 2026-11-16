@@ -1,8 +1,14 @@
 # Zen Refined known issues
 
-Baseline: `0.5.0-preview.2`. Distinguish reported behavior from compatibility risks and unverified causes.
+Baseline: `0.6.0-preview.15`. Distinguish reported behavior from compatibility risks and unverified causes.
 
 ## Confirmed in user testing
+
+### Startup window flash
+
+- Reported: intermittent opaque-to-transparent window flash at startup. The two opaque Zen Refined startup overlays were a concrete candidate, not a measured Windows root cause.
+- Preview.15 removes both, skips after the first chrome paint and settles interrupted effects without changing native materials. Real Windows/Zen/Windhawk verification remains pending.
+- Native window creation, DWM, Gecko before Sine loads and external Windhawk behavior are outside the mod's control.
 
 ### Center Assembly — intermittent startup stutter / low apparent FPS
 

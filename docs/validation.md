@@ -133,3 +133,9 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Click the native window close button in standalone Zen and with OnePlane. Visible chrome retreats while page stays in place; one original close command runs after 520ms.
 - [ ] Native multiple-tab warning and beforeunload cancellation: confirm the browser remains fully usable and all temporary effects are removed. Accept native close normally. No changes to session restore or warning preferences.
 - [ ] Ctrl+Shift+W, second close click, global quit, OS shutdown, reduced motion, disable during animation, multiple windows, startup overlap and Sine unload. No stuck styles or delayed shutdown.
+
+## 0.6.0-preview.15 — transparency-safe Center Assembly
+
+- [ ] Cold start and new browser window with Windows Mica/acrylic, Windhawk on/off, Zen alone and OnePlane: no opaque overlay or change to native backdrop; page stays visible. Late Sine load skips animation rather than hiding already painted controls.
+- [ ] Interrupt during waiting, active motion and settling (click, key, resize, timeout, disable, unload). No window-wide flash, no retained effects or hold. Normal reduced-motion bypass and native controls remain usable.
+- [ ] Confirm startup placeholder preferences, Downloads, Page Progress and Center Disassembly remain unchanged.

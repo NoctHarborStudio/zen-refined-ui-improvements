@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.6.0-preview.14`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.15`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -16,9 +16,13 @@ Baseline: `0.6.0-preview.14`. Zen Refined owns general browser UI improvements. 
 - Download Indicator & Downloads Dock: accepted, including fluid wave, shared recent/full surface, source-aware native sidebar hold, sorting and transfer statistics.
 - Page Progress: accepted; top center-out gray line without percentage.
 
-## In development — 0.6.0-preview.14
+## Accepted in user testing — 0.6.0-preview.14
 
-- Center Disassembly: simple reverse startup assembly, 520ms, optional, enabled by default. Native close command remains authoritative. Real Zen runtime validation pending.
+- Center Disassembly: reverse startup assembly, 520ms, native close command remains authoritative.
+
+## In development — 0.6.0-preview.15
+
+- Center Assembly transparency: no full-window or page covers, first-paint gate, smooth interruption. Verify actual Windows cold start with and without Windhawk.
 - Optional OnePlane Extension Dock integration remains future work.
 
 ## Backlog

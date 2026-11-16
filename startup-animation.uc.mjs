@@ -9,12 +9,22 @@
   const get=id=>document.getElementById(id);
   const reduced=window.matchMedia("(prefers-reduced-motion: reduce)");
   const now=()=>window.performance.now();
+  function canStartBeforePaint(utils,readyState){
+    // Never hide controls that Gecko has already painted.
+    try{
+      const count=utils?.paintCount;
+      if(count!==undefined&&count!==null&&Number.isFinite(Number(count)))return Number(count)===0;
+    }catch{}
+    try{if(utils?.paintingSuppressed===true)return true;}catch{}
+    return readyState==="loading";
+  }
   // No replay on Sine hot update, private popup, or an established window.
   // A late loader cannot conceal an already-displayed interface seamlessly.
   if(typeof window.addUnloadListener!=="function"||window[SEEN]||root.hasAttribute("popup-window"))return;
   window[SEEN]=true;
   if(!prefs.getBoolPref(ENABLE,true)||reduced.matches||now()>4000||window.closed||
-      root.hasAttribute("customizing")||root.getAttribute("inDOMFullscreen")==="true")return;
+      root.hasAttribute("customizing")||root.getAttribute("inDOMFullscreen")==="true"||
+      !canStartBeforePaint(window.windowUtils,document.readyState))return;
   // Sine saves the previous default as a user value. Upgrade that exact
   // 760ms default once; preserve every other choice, and allow users to
   // select 760ms again after the migration.
@@ -27,10 +37,10 @@
   }catch{}
   const duration=Math.max(400,Math.min(1500,prefs.getIntPref(DURATION,1050)));
   const scale=duration/1050;
-  const started=now(),deadline=started+2400;
-  let dead=false,playing=false,raf=0,timer=0,settled=false,nativeReady=false,readyAt=0,holdNode=null;
-  let nativeObserver=null,cover=null,pageVeil=null,style=null,lateObserver=null,lateResize=null,lateFrame=0,playStart=0,finishAt=0,sheetURI=null;
-  const animations=new Set(),owned=new Map(),seen=new Set();
+  const started=now(),deadline=started+1600;
+  let dead=false,playing=false,settling=false,raf=0,timer=0,settled=false,nativeReady=false,readyAt=0,holdNode=null;
+  let nativeObserver=null,style=null,lateObserver=null,lateResize=null,lateFrame=0,playStart=0,finishAt=0,sheetURI=null;
+  const animations=new Map(),owned=new Map(),seen=new Set();
   const MANAGED="data-zr-startup-managed",EFFECT="data-zr-startup-effect",MOVE="data-zr-startup-move",CLIP="data-zr-startup-clip",PROGRESS="--zr-startup-progress";
   let registered=false;
   try{window.CSS.registerProperty({name:PROGRESS,syntax:"<number>",inherits:false,initialValue:"1"});registered=true;}
@@ -53,14 +63,14 @@
     lateObserver?.disconnect();lateObserver=null;lateResize?.disconnect();lateResize=null;
     if(nativeObserver)try{Services.obs.removeObserver(nativeObserver,"browser-delayed-startup-finished");}catch{}
     nativeObserver=null;
-    for(const a of animations)try{a.cancel();}catch{}
+    for(const a of animations.keys())try{a.cancel();}catch{}
     animations.clear();
     for(const n of [...owned.keys()])restore(n);
     for(const n of seen)n.removeAttribute(MANAGED);
     seen.clear();
     if(sheetURI)try{window.windowUtils.removeSheet(sheetURI,window.windowUtils.USER_SHEET);}catch{}
     sheetURI=null;
-    cover?.remove();pageVeil?.remove();style?.remove();
+    style?.remove();
     root.removeAttribute(PHASE);holdNode?.removeAttribute(HOLD);
     for(const type of inputs)window.removeEventListener(type,interrupt,true);
     window.removeEventListener("resize",onResize);
@@ -70,18 +80,36 @@
     try{prefs.removeObserver(ENABLE,preferenceChanged);}catch{}
     if(window[KEY]===finish)delete window[KEY];
   }
-  function interrupt(){finish();}
-  function onResize(){if(playing)finish();}
-  function preferenceChanged(){if(reduced.matches||!prefs.getBoolPref(ENABLE,true))finish();}
-  function veil(id){
-    const n=html("div");n.id=id;n.setAttribute("aria-hidden","true");
-    // An opaque, theme-compatible chrome veil; not a screenshot, not a
-    // screenshot blur, and not a second copy of the content.
-    for(const [k,v] of Object.entries({position:"fixed",inset:"0","z-index":"2147483646","pointer-events":"none",
-      background:"light-dark(#eef0f4, #15171e)",margin:"0",padding:"0",border:"0","box-sizing":"border-box"}))
-      n.style.setProperty(k,v,"important");
-    root.append(n);return n;
+  function settle(){
+    if(dead||settling)return;
+    if(!playing||reduced.matches||!animations.size){finish();return;}
+    settling=true;
+    // The native background and page have never been touched.
+    // Finish active effects from current values, not a different frame.
+    root.setAttribute(PHASE,"settling");
+    lateObserver?.disconnect();lateObserver=null;lateResize?.disconnect();lateResize=null;
+    if(lateFrame)window.cancelAnimationFrame(lateFrame);lateFrame=0;
+    if(timer)window.clearTimeout(timer);
+    const pending=[];
+    for(const [a,record] of animations){
+      try{
+        const cs=window.getComputedStyle(record.n),to=record.frames.at(-1),from={};
+        for(const k of Object.keys(to)){
+          const value=k.startsWith("--")?cs.getPropertyValue(k).trim():cs[k];
+          from[k]=value!==undefined&&value!==""?value:to[k];
+        }
+        pending.push({a,record,from,to});
+      }catch{pending.push({a,record,from:null,to:null});}
+    }
+    for(const {a,record,from,to} of pending){
+      animations.delete(a);try{a.cancel();}catch{}
+      if(!from||!play(record.n,[from,to],0,120,false,FADE,record.complete))record.complete?.();
+    }
+    timer=window.setTimeout(finish,155);
   }
+  function interrupt(){settle();}
+  function onResize(){if(playing)settle();}
+  function preferenceChanged(){if(reduced.matches)finish();else if(!prefs.getBoolPref(ENABLE,true))settle();}
   function bounds(n,ignoreOpacity=false){
     if(!n||n.hidden||n.collapsed)return null;
     const s=window.getComputedStyle(n),r=n.getBoundingClientRect();
@@ -92,7 +120,7 @@
     if(!n)return false;
     try{
       const a=n.animate(frames,{delay,duration:length,easing,fill:"both"});
-      animations.add(a);
+      animations.set(a,{n,frames,complete});
       a.finished?.then(()=>{
         if(dead||!animations.has(a)||retain)return;
         animations.delete(a);
@@ -185,7 +213,7 @@
     for(const parent of roots){
       for(const n of parent.querySelectorAll(buttonSelector))if(eligible(n))candidates.add(n);
     }
-    for(const n of Array.from(target?.children||[]))if(eligible(n)&&![...candidates].some(c=>c!==n&&n.contains(c)))candidates.add(n);
+    // Animate controls, never whole toolbar wrappers or background surfaces.
     const leaves=[...candidates].filter(n=>![...candidates].some(c=>c!==n&&n.contains(c)));
     const left=[],right=[];
     for(const n of leaves){
@@ -211,15 +239,13 @@
     }
   }
   function scheduleLate(){
-    if(dead||!playing||lateFrame)return;
+    if(dead||!playing||settling||lateFrame)return;
     lateFrame=window.requestAnimationFrame(()=>{
-      lateFrame=0;if(dead)return;
+      lateFrame=0;if(dead||settling)return;
       const bar=floatingBar();
       if(bar&&!seen.has(bar))openFromCenter(bar,590,440,true);
       revealBookmarks(window.innerWidth/2,true);
-      const row=get("oneplane-tabs"),url=get("urlbar-container"),island=row?.querySelector(".oneplane-title-island");
-      const r=bounds(island)||bounds(row)||bounds(url);
-      controls(row,url,r?r.left+r.width/2:window.innerWidth/2,true);
+      // Other controls were sampled at launch. Never replay a visible toolbar button.
     });
   }
   function collectTabs(row,center){
@@ -237,24 +263,17 @@
     return units;
   }
   function launch(one){
-    if(dead||playing)return;playing=true;
+    if(dead||playing||settling)return;playing=true;
     try{
       const row=get("oneplane-tabs"),url=get("urlbar-container");
-      const nav=get("nav-bar"),bookmarks=get("PersonalToolbar"),items=get("PlacesToolbarItems");
+      const bookmarks=get("PersonalToolbar"),items=get("PlacesToolbarItems");
       const floating=floatingBar();
-      const page=get("tabbrowser-tabpanels")||get("tabbrowser-tabbox");
-      const ur=bounds(url),nr=bounds(nav),br=bounds(bookmarks),rr=one?bounds(row):null;
+      // Release early control gates before sampling native opacity, in one task.
+      root.setAttribute(PHASE,"playing");
+      const ur=bounds(url),rr=one?bounds(row):null;
       const island=one?row?.querySelector(".oneplane-title-island"):null,ir=bounds(island);
       const center=ir?ir.left+ir.width/2:one&&rr?rr.left+rr.width/2:ur?ur.left+ur.width/2:window.innerWidth/2;
-      // Read all geometry before effects start. The content veil is clipped
-      // below the real toolbar; top chrome remains visible as it assembles.
-      const bottom=Math.min(window.innerHeight,Math.max(nr?.bottom||0,br?.bottom||0,rr?.bottom||0));
-      const pr=bounds(page);
-      pageVeil=veil("zr-startup-page-veil");
-      const top=Math.max(0,bottom,pr?.top||0);
-      pageVeil.style.setProperty("clip-path","inset("+top+"px 0 0 0)","important");
       playStart=now();finishAt=playStart+duration+80;
-      root.setAttribute(PHASE,"playing");
       // The native floating field may be a top-layer popover; never clip
       // its parent during its independent entrance.
       if(ur&&!floating)openFromCenter(url,45,410);
@@ -269,8 +288,14 @@
         const plus=row.querySelector(".oneplane-new-tab");if(bounds(plus))slide(plus,-26,0,340,390);
         if(ir)openFromCenter(island,45,410);
       }else{
-        const sidebar=get("zen-tabs-wrapper")||get("TabsToolbar");
-        const sr=bounds(sidebar);if(sr)slide(sidebar,sr.left<window.innerWidth/2?-18:18,0,155,445);
+        // Move actual native tabs instead of fading the acrylic sidebar.
+        const sidebar=get("zen-tabs-wrapper")||get("TabsToolbar"),sr=bounds(sidebar,true);
+        const dx=sr&&sr.left>=window.innerWidth/2?18:-18;
+        let i=0;
+        for(const tab of get("tabbrowser-tabs")?.querySelectorAll(".tabbrowser-tab")||[]){
+          if(!bounds(tab))continue;
+          slide(tab,dx,0,155+Math.min(i++*12,120),445);
+        }
       }
       controls(row,url,center);
       revealBookmarks(center);
@@ -285,15 +310,12 @@
         for(const n of [get("urlbar"),items,bookmarks])if(n)lateResize.observe(n);
       }
       scheduleLate();
-      // Background reveals first; content stays veiled until chrome is in
-      // motion. Nothing waits for network loads, remote DOM or a page FCP.
-      play(pageVeil,[{opacity:1},{opacity:0}],365*scale,410*scale,true,FADE);
-      play(cover,[{opacity:1},{opacity:0}],0,230*scale,true,FADE);
+      // The page and native Zen background stay painted throughout.
       timer=window.setTimeout(finish,Math.max(0,finishAt-now()));
     }catch(error){console.warn("[Zen Refined] Startup reveal failed:",error);finish();}
   }
   function schedule(){
-    if(dead||playing||raf)return;
+    if(dead||playing||settling||raf)return;
     raf=window.requestAnimationFrame(tick);
   }
   function tick(){
@@ -336,8 +358,7 @@
     window.addEventListener("OnePlane:StartupState",schedule);
     reduced.addEventListener("change",preferenceChanged);
     prefs.addObserver(ENABLE,preferenceChanged);
-    // The early cover masks ordinary chrome. A floating native search is
-    // in Gecko's top layer, so clip it during the waiting phase separately.
+    // Early startup gates only animated controls, never a window-sized layer.
     // Sine applies its chrome CSS at USER_SHEET origin. A user-important
     // declaration wins over author-important inline styles. Scope our
     // temporary user sheet to owned nodes and use deliberate specificity
@@ -346,10 +367,25 @@
     const gate=":is(#zr-startup-specificity,:not([data-zr-startup-managed]))".repeat(8);
     const base=":root[data-zr-startup-phase] [data-zr-startup-effect]"+specificity;
     const edge="calc(49% * (1 - var("+PROGRESS+")) - 8px * var("+PROGRESS+"))";
+    const waiting=':root[data-zr-startup-phase="waiting"]';
+    const active=':root[data-zr-startup-phase="playing"]';
+    const earlyTargets=[
+      "#urlbar-container",
+      '#urlbar:is([zen-floating-urlbar="true"],[zen-newtab])',
+      "#oneplane-tabs :is(.oneplane-tab,.oneplane-split-group,.oneplane-title-island,.oneplane-new-tab)",
+      "#tabbrowser-tabs .tabbrowser-tab",
+      "#PlacesToolbarItems > *",
+      "#nav-bar :is(toolbarbutton,button,.titlebar-button,[role=button])",
+      "#zen-sidebar-top-buttons :is(toolbarbutton,button,.titlebar-button,[role=button])",
+      ":is(#titlebar-buttonbox,#titlebar-buttonbox-container,#zen-window-controls,.titlebar-buttonbox-container) .titlebar-button"
+    ];
+    const waitingGate=earlyTargets.map(s=>waiting+" "+s+":not([data-zr-startup-managed])"+gate).join(",\n");
     const cssText=`
-      :root[data-zr-startup-phase] #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed])${gate},
-      :root[data-zr-startup-phase="playing"] #PlacesToolbarItems > :not([data-zr-startup-managed])${gate} {
+      ${waitingGate},
+      ${active} #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed])${gate},
+      ${active} #PlacesToolbarItems > :not([data-zr-startup-managed])${gate} {
         opacity: 0 !important;
+        transition-property: none !important;
       }
       ${base} {
         /* Do not let a native CSS transition chase each sampled value. */
@@ -369,8 +405,10 @@
     }catch{
       sheetURI=null;style=html("style");style.textContent=cssText;root.append(style);
     }
-    root.setAttribute(PHASE,"waiting");cover=veil("zr-startup-cover");hold();
-    timer=window.setTimeout(finish,2400);
+    // A stylesheet registration must not introduce a late gate either.
+    if(!canStartBeforePaint(window.windowUtils,document.readyState)){finish();return;}
+    root.setAttribute(PHASE,"waiting");hold();
+    timer=window.setTimeout(finish,Math.max(0,deadline-now()));
     if(window.gBrowserInit?.delayedStartupFinished)onNativeReady();
     else{nativeObserver=subject=>{if(subject!==window)return;Services.obs.removeObserver(nativeObserver,"browser-delayed-startup-finished");nativeObserver=null;onNativeReady();};
       Services.obs.addObserver(nativeObserver,"browser-delayed-startup-finished");}
