@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0-preview.9
+
+- Replace the recent/full pair with one persistent downloads surface, one row cache and in-place header/sort expansion to the bottom of the viewport (12px margin).
+- Two-stage fluid entrance: a small icon-sized seed travels to the far edge, then expands. Closing reverses the movement.
+- Recent auto-dismiss uses a 2s pointer-only timer after reveal or pointer exit; full mode has no timer. Preserve row actions and avoid restarting an open panel on new downloads.
+
 ## 0.6.0-preview.8
 
 - Unify recent downloads and full dock at 430 CSS px, with a shared renderer and identical per-file actions, status, progress and statistics.
