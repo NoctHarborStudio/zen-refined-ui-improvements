@@ -26,15 +26,23 @@
 #PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
   overflow: visible !important;
 }
+/* Final layout is committed once. WAAPI animates transform only.
+ * Normal transform declarations are intentional: important declarations
+ * would override Web Animations' effect in the CSS cascade. */
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip],
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
+  transform-origin: center top !important;
+  transition: background-color 180ms ease, box-shadow 180ms ease !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip] {
+  will-change: transform;
+}
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
   position: relative;
   flex-shrink: 0 !important;
-  transform-origin: center top !important;
   margin-inline-start: calc(var(--zr-bm-margin-start, 0px) + var(--zr-bm-grow, 0px)) !important;
   margin-inline-end: calc(var(--zr-bm-margin-end, 0px) + var(--zr-bm-grow, 0px)) !important;
-  scale: var(--zr-bm-scale-x, 1) var(--zr-bm-scale-y, 1) !important;
-  translate: 0 0 !important;
-  transition: background-color 180ms ease, box-shadow 180ms ease !important;
+  transform: scale(var(--zr-bm-scale-x, 1), var(--zr-bm-scale-y, 1));
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] {
   background-color: color-mix(in srgb, currentColor 16%, transparent) !important;
@@ -43,7 +51,11 @@
   z-index: 3;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] :is(.toolbarbutton-icon, .toolbarbutton-text) {
-  scale: var(--zr-bm-inner-x, 1) var(--zr-bm-inner-y, 1) !important;
+  transform: scale(var(--zr-bm-inner-x, 1), var(--zr-bm-inner-y, 1));
+  transform-origin: center;
+  transition: none !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip] :is(.toolbarbutton-icon, .toolbarbutton-text) {
   transform-origin: center;
   transition: none !important;
 }
@@ -63,7 +75,8 @@
   box-shadow: 0 0 8px color-mix(in srgb, #99b4ff 52%, transparent);
   opacity: 0;
   transition: opacity 150ms ease;
-  will-change: transform, width, height;
+  transform-origin: top left;
+  will-change: transform;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator[data-zr-visible] { opacity: 1 !important; }
 #PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator[data-zr-no-glow] { box-shadow: none !important; }

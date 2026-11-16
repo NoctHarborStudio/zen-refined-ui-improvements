@@ -30,10 +30,12 @@ function install() {
   const openPopups = new Set();
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
-  let leaveTimer = 0, geometryFrame = 0, geometryPlan = null, contourFrame = 0, contourSurface = null, contourKey = "";
-  let baseHeight = 0, basePadding = 0, reserve = 0, ruleSerial=0;
-  const geometrySheet=document.createElementNS("http://www.w3.org/1999/xhtml","style");
-  geometrySheet.id="zr-bm-geometry-sheet";
+  let leaveTimer=0, flipTimer=0, flipEpoch=0, motionPlan=null, contourFrame=0, contourSurface=null, contourKey="";
+  const flips=new Map(), flipNodes=new Set();
+  let pointerFrame=0, pendingPointer=null;
+  const FLIP_EASE="cubic-bezier(.333333,0,.666667,1)";
+  let baseHeight=0,basePadding=0,reserve=0;
+  const busy=()=>state.size>0||flips.size>0;
   const wrapper = document.getElementById("zen-appcontent-navbar-wrapper");
   const contourPrefix = "zen.oneplane.fade-";
   const GAP_GRACE_MS = 180;
@@ -118,7 +120,7 @@ function install() {
     if(contourSurface!==surface)releaseContour();
     // Never recalculate the mask from an animated card, even if a resize or
     // mutation notification arrives during a transition.
-    if(state.size)return;
+    if(busy())return;
     const wr=wrapper.getBoundingClientRect(),nav=navbar?.getBoundingClientRect(),rr=row.getBoundingClientRect(),bm=toolbar.getBoundingClientRect();
     if(wr.width<1||!nav||nav.height<1||bm.height<1)return;
     const container=document.getElementById("zen-appcontent-navbar-container");
@@ -176,7 +178,7 @@ function install() {
       updateReserve();scheduleContour();
     }
     indicator.toggleAttribute("data-zr-no-glow", !settings.glow);
-    if (settings.enabled && active) {
+    if(settings.enabled && active) {
       const saved = pointerX;
       const item = active;
       clear(true);
@@ -203,162 +205,156 @@ function install() {
     return rect.width > 0 && rect.height > 2;
   }
 
-  function measure(item) {
-    if (state.has(item)) return state.get(item);
-    const style = window.getComputedStyle(item);
-    const rect = item.getBoundingClientRect();
-    const numeric = v => parseFloat(v) || 0;
-    const metric = {
-      width: rect.width,
-      height: rect.height,
-      grow: 0, vertical: 0,
-      start: numeric(style.marginInlineStart),
-      end: numeric(style.marginInlineEnd),
-      rule: null
-    };
-    return metric;
+  function measure(item){
+    const prior=state.get(item);if(prior)return prior;
+    const style=window.getComputedStyle(item),r=item.getBoundingClientRect();
+    return {width:r.width,height:r.height,start:parseFloat(style.marginInlineStart)||0,end:parseFloat(style.marginInlineEnd)||0};
   }
-
-  // Do not force native overflow/chevron visibility or reparent Places nodes.
-  // Limit the extra layout space to the available width in the native row.
-  function availableGrowth() {
-    const bounds = list.getBoundingClientRect();
-    const visible = Array.from(list.children).filter(node => {
-      if (node.hidden || node.collapsed) return false;
-      const style = window.getComputedStyle(node);
-      return style.visibility === "visible" && style.display !== "none";
+  function visibleRow(){
+    return Array.from(list.children).filter(node=>{
+      if(node.hidden||node.collapsed)return false;
+      const cs=window.getComputedStyle(node);
+      return cs.visibility==="visible"&&cs.display!=="none";
     });
-    if (!visible.length || bounds.width <= 0) return 0;
-    const gap = parseFloat(window.getComputedStyle(list).columnGap) || 0;
-    let occupied = Math.max(0, visible.length - 1) * gap;
-    for (const node of visible) {
-      const m = measure(node);
-      occupied += m.width + m.start + m.end;
+  }
+  function availableGrowth(){
+    const bounds=list.getBoundingClientRect(),visible=visibleRow();
+    if(!visible.length||bounds.width<=0)return 0;
+    const gap=parseFloat(window.getComputedStyle(list).columnGap)||0;
+    let occupied=Math.max(0,visible.length-1)*gap;
+    for(const node of visible){const m=measure(node);occupied+=m.width+m.start+m.end;}
+    return Math.max(0,bounds.width-occupied-8);
+  }
+  function box(r){return {left:r.left,top:r.top,width:r.width,height:r.height,right:r.right,bottom:r.bottom};}
+  function local(r,t){return {left:r.left-t.left-toolbar.clientLeft,top:r.top-t.top-toolbar.clientTop,width:r.width,height:r.height};}
+  function innerNodes(item){return Array.from(item.querySelectorAll?.(".toolbarbutton-icon, .toolbarbutton-text")||[]);}
+  function stopFlips(){
+    flipEpoch++;
+    if(flipTimer)window.clearTimeout(flipTimer);flipTimer=0;
+    for(const a of flips.values())try{a.cancel();}catch{}
+    flips.clear();
+    for(const n of flipNodes)n.removeAttribute("data-zr-bm-flip");
+    flipNodes.clear();
+  }
+  function resetActive(){
+    for(const item of state.keys()){
+      item.removeAttribute("data-zr-bm-active");
+      item.removeAttribute("data-zr-bm-managed");
+      for(const k of ["--zr-bm-margin-start","--zr-bm-margin-end","--zr-bm-grow","--zr-bm-scale-x","--zr-bm-scale-y","--zr-bm-inner-x","--zr-bm-inner-y"])item.style.removeProperty(k);
     }
-    // Leave a small buffer so Places need not activate overflow at the edge.
-    return Math.max(0, bounds.width - occupied - 8);
+    state.clear();
   }
-
-  function geometryStyle(item,m){
-    if(m.rule)return m.rule.style;
-    return item.style;
+  function setActive(item,m,grow){
+    const sx=1+grow/Math.max(1,m.width),sy=desiredY(),inner=Math.min(1.18,sx,sy);
+    state.set(item,{...m,sx,sy,grow});
+    item.style.setProperty("--zr-bm-margin-start",m.start+"px");
+    item.style.setProperty("--zr-bm-margin-end",m.end+"px");
+    item.style.setProperty("--zr-bm-grow",grow/2+"px");
+    // First commit the final slot but leave scale at identity until the
+    // Last geometry has been read. No writes between geometry reads.
+    item.setAttribute("data-zr-bm-managed","true");
+    item.setAttribute("data-zr-bm-active","true");
+    return {sx,sy,inner};
   }
-  function installRule(item,m){
+  function transform(dx,dy,sx=1,sy=1){
+    return "translate3d("+dx.toFixed(4)+"px,"+dy.toFixed(4)+"px,0) scale("+sx.toFixed(6)+","+sy.toFixed(6)+")";
+  }
+  function play(node,from,to,duration){
+    if(!duration||from===to)return;
     try{
-      const sheet=geometrySheet.sheet;if(!sheet)return;
-      const id=String(++ruleSerial),index=sheet.insertRule(`[data-zr-bm-geometry="${id}"] {}`,sheet.cssRules.length);
-      m.rule=sheet.cssRules[index];item.setAttribute("data-zr-bm-geometry",id);
+      const a=node.animate([{transform:from},{transform:to}],{duration,easing:FLIP_EASE,fill:"both"});
+      flips.set(node,a);
     }catch{}
   }
-  function removeRule(item,m){
-    item.removeAttribute("data-zr-bm-geometry");
-    if(!m.rule)return;
-    try{const sheet=geometrySheet.sheet;const index=Array.from(sheet.cssRules).indexOf(m.rule);if(index>=0)sheet.deleteRule(index);}catch{}
-    m.rule=null;
-  }
-  function forget(item){
-    const m=state.get(item);if(!m)return;
-    item.removeAttribute("data-zr-bm-active");item.removeAttribute("data-zr-bm-managed");removeRule(item,m);
-    for(const key of ["--zr-bm-margin-start","--zr-bm-margin-end","--zr-bm-grow",
-      "--zr-bm-scale-x","--zr-bm-scale-y","--zr-bm-inner-x","--zr-bm-inner-y"])item.style.removeProperty(key);
-    state.delete(item);
-    if(!state.size){toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
-  }
-  function applyGeometry(item,m){
-    const sx=1+m.grow/Math.max(1,m.width),sy=1+(desiredY()-1)*m.vertical;
-    const inner=Math.min(1.18,sx,sy);
-    // CSSOM rule edits do not mutate the element style attribute. OnePlane
-    // observes bookmark DOM mutations; avoid forcing a mask pass each frame.
-    const style=geometryStyle(item,m);
-    const set=(key,value)=>{const v=String(value);if(style.getPropertyValue(key)!==v)style.setProperty(key,v);};
-    set("--zr-bm-grow",(m.grow/2).toFixed(3)+"px");
-    set("--zr-bm-scale-x",sx.toFixed(5));set("--zr-bm-scale-y",sy.toFixed(5));
-    set("--zr-bm-inner-x",(inner/sx).toFixed(5));set("--zr-bm-inner-y",(inner/sy).toFixed(5));
-  }
-  function samplePlan(time){
-    if(!geometryPlan)return;
-    const p=geometryPlan,t=clamp((time-p.start)/Math.max(1,p.duration),0,1),e=t*t*(3-2*t);
-    for(const [item,g] of p.items){
-      const m=state.get(item);if(!m)continue;
-      m.grow=g.from+(g.to-g.from)*e;m.vertical=g.vFrom+(g.vTo-g.vFrom)*e;
-      applyGeometry(item,m);
-    }
-    if(t>=1){
-      geometryPlan=null;
-      for(const [item,m] of [...state])if(item!==active&&m.grow<.001&&m.vertical<.001)forget(item);
-    }
-  }
-  function geometryTick(time){
-    geometryFrame=0;if(dead)return;
-    samplePlan(time);
-    if(geometryPlan)geometryFrame=window.requestAnimationFrame(geometryTick);
+  function endFlip(epoch){
+    if(epoch!==flipEpoch)return;
+    stopFlips();
+    if(!active){motionPlan=null;toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
   }
   function retarget(){
-    const now=window.performance.now();
-    samplePlan(now);
-    if(geometryFrame)window.cancelAnimationFrame(geometryFrame);
-    geometryFrame=0;
-    const free=availableGrowth(),budget=Math.max(0,free-4),items=new Map();
-    // All outgoing and incoming slots share one easing curve. Their sum
-    // interpolates between two budgets, so a fast hover change cannot
-    // transiently demand twice the free width and trigger native overflow.
-    let current=0;for(const m of state.values())current+=m.grow;
-    const factor=current>budget&&current>0?budget/current:1;
-    for(const [item,m] of state){
-      m.grow*=factor;
-      const to=item===active?Math.min(m.width*(settings.scale-1),budget):0;
-      items.set(item,{from:m.grow,to,vFrom:m.vertical,vTo:item===active?1:0});
-      item.toggleAttribute("data-zr-bm-active",item===active);
-      applyGeometry(item,m);
+    // FIRST: capture painted positions, including interrupted WAAPI motion.
+    // No stylesheet or layout mutations in this read phase.
+    const nodes=visibleRow(),first=new Map(),inners=new Map();
+    const firstToolbar=box(toolbar.getBoundingClientRect());
+    for(const n of nodes){
+      const r=box(n.getBoundingClientRect());
+      if(r.width>0&&r.height>0)first.set(n,r);
+      if(n===active||state.has(n)||flipNodes.has(n))for(const ch of innerNodes(n)){
+        const t=window.getComputedStyle(ch).transform;
+        inners.set(ch,t&&t!=="none"?t:"scale(1,1)");
+      }
     }
-    geometryPlan={start:now,duration:motion.matches?0:settings.duration,items};
-    if(motion.matches)samplePlan(now+1);else geometryFrame=window.requestAnimationFrame(geometryTick);
-  }
-  function expand(item){
-    const m=measure(item);
-    if(!(m.width>0)||!(m.height>0))return false;
-    if(!state.has(item)){
-      state.set(item,m);installRule(item,m);
-      const style=geometryStyle(item,m);
-      style.setProperty("--zr-bm-margin-start",m.start+"px");
-      style.setProperty("--zr-bm-margin-end",m.end+"px");
-      applyGeometry(item,m);item.setAttribute("data-zr-bm-managed","true");
+    // Reset the old slot and animation before reading resting metrics.
+    stopFlips();resetActive();
+    const natural=new Map();
+    const bounds=list.getBoundingClientRect(),gap=parseFloat(window.getComputedStyle(list).columnGap)||0;
+    let occupied=Math.max(0,nodes.length-1)*gap;
+    for(const n of nodes){
+      const r=box(n.getBoundingClientRect()),style=window.getComputedStyle(n);
+      const m={width:r.width,height:r.height,start:parseFloat(style.marginInlineStart)||0,end:parseFloat(style.marginInlineEnd)||0};
+      natural.set(n,m);occupied+=m.width+m.start+m.end;
     }
-    // The constant bottom reserve is larger than the maximum scale
-    // growth. A top transform origin makes the upper edge invariant.
-    toolbar.setAttribute("data-zr-bm-room","true");
-    retarget();
-    return true;
+    const budget=Math.max(0,bounds.width-occupied-12),m=natural.get(active);
+    if(active&&(!m||m.width<=0||m.height<=0)){active=null;motionPlan=null;toolbar.removeAttribute("data-zr-bm-room");scheduleContour();return false;}
+    // LAST: commit the final layout once, independent of refresh rate.
+    // The previous slot is already gone; two expanded slots cannot
+    // temporarily overrun the native Places overflow budget.
+    let target=null;
+    if(active){toolbar.setAttribute("data-zr-bm-room","true");target=setActive(active,m,Math.min(m.width*(settings.scale-1),budget));}
+    else toolbar.setAttribute("data-zr-bm-room","true");
+    const lastToolbar=box(toolbar.getBoundingClientRect()),last=new Map();
+    for(const n of nodes){const r=box(n.getBoundingClientRect());if(r.width>0&&r.height>0)last.set(n,r);}
+    const duration=motion.matches?0:settings.duration,start=window.performance.now();
+    motionPlan=null;
+    // INVERT + PLAY: compositor-friendly transforms only, with a fixed
+    // top edge. No JS callback edits margins or reads layout per frame.
+    for(const [n,b] of last){
+      const a=first.get(n)||b,tx=a.left+a.width/2-b.left-b.width/2,ty=a.top-b.top;
+      const sx=a.width/Math.max(1,b.width),sy=a.height/Math.max(1,b.height);
+      const isActive=n===active,ex=isActive?target.sx:1,ey=isActive?target.sy:1;
+      if(isActive){
+        n.style.setProperty("--zr-bm-scale-x",String(ex));n.style.setProperty("--zr-bm-scale-y",String(ey));
+        n.style.setProperty("--zr-bm-inner-x",String(target.inner/ex));n.style.setProperty("--zr-bm-inner-y",String(target.inner/ey));
+        const f=local(a,firstToolbar),l=local(b,lastToolbar);
+        motionPlan={start,duration,from:f,to:{left:l.left+b.width*(1-ex)/2,top:l.top,width:b.width*ex,height:b.height*ey},
+          originX:lastToolbar.left+toolbar.clientLeft,height:lastToolbar.height};
+      }
+      const moving=Math.abs(tx)+Math.abs(ty)+Math.abs(sx-ex)*b.width+Math.abs(sy-ey)*b.height>.05;
+      if(duration&&moving){
+        n.setAttribute("data-zr-bm-flip","true");flipNodes.add(n);
+        play(n,transform(tx,ty,sx,sy),transform(0,0,ex,ey),duration);
+      }
+      if(isActive||inners.size)for(const ch of innerNodes(n)){
+        if(!isActive&&!inners.has(ch))continue;
+        const ix=isActive?target.inner/ex:1,iy=isActive?target.inner/ey:1;
+        play(ch,inners.get(ch)||"scale(1,1)","scale("+ix+","+iy+")",duration);
+      }
+    }
+    if(flips.size){const epoch=flipEpoch;flipTimer=window.setTimeout(()=>endFlip(epoch),duration+34);}
+    else if(!active){toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
+    return !!active;
   }
-
-  function destination() {
-    if (!active || !eligible(active)) return null;
-    const a = active.getBoundingClientRect();
-    const s = toolbar.getBoundingClientRect();
-    if (a.width <= 0 || s.height <= 2) return null;
-    const originX = s.left + toolbar.clientLeft;
-    const originY = s.top + toolbar.clientTop;
-    const center = a.left + a.width / 2;
-    const bias = pointerX === null ? 0 : clamp((pointerX - center) / Math.max(1, a.width / 2), -1, 1);
-    // The drop is anchored to the bookmark center, not to the mouse.
-    const maxBias = Math.min(12, a.width * .12);
-    const base = clamp(a.width * .14, 12, 18);
-    const y = clamp(a.bottom - originY + 5, 3, Math.max(3, s.height - 3));
-    return { x: center - originX + bias * maxBias, y, w: base };
+  function destination(now=window.performance.now()){
+    const p=motionPlan;if(!active||!p)return null;
+    const t=p.duration?clamp((now-p.start)/p.duration,0,1):1,e=t*t*(3-2*t);
+    const a=p.from,b=p.to;
+    const x=a.left+(b.left-a.left)*e,width=a.width+(b.width-a.width)*e;
+    const y=a.top+(b.top-a.top)*e,height=a.height+(b.height-a.height)*e;
+    const center=x+width/2;
+    const bias=pointerX===null?0:clamp((pointerX-p.originX-center)/Math.max(1,width/2),-1,1);
+    return {x:center+bias*Math.min(12,width*.12),y:clamp(y+height+5,3,Math.max(3,p.height-3)),w:clamp(width*.14,12,18)};
   }
 
   function paint() {
     const tail = clamp(vx * .0035, -5, 5);
-    indicator.style.width = w.toFixed(2) + "px";
-    indicator.style.height = h.toFixed(2) + "px";
-    indicator.style.transform = "translate3d(" + (cx - w / 2 - tail).toFixed(2) +
-      "px," + (cy - h / 2).toFixed(2) + "px,0)";
+    // Fixed 14x3 element; only transform is animated (no layout writes).
+    indicator.style.transform="translate3d("+(cx-w/2-tail).toFixed(2)+"px,"+(cy-h/2).toFixed(2)+"px,0) scale("+(w/14).toFixed(5)+","+(h/3).toFixed(5)+")";
   }
 
   function animate(now) {
     raf = 0;
-    if (dead || !active || !settings.indicator || !toolbarVisible()) return;
-    const p = destination();
+    if(dead||!active||!settings.indicator||!settings.enabled||toolbar.hidden||toolbar.collapsed)return;
+    const p=destination(now);
     if (!p) { clear(); return; }
     const dt = last ? clamp((now - last) / 1000, 0.001, .05) : 1 / 60;
     last = now;
@@ -412,9 +408,9 @@ function install() {
     cancelPendingLeave();
     pointerX = x;
     if (active === item) { schedule(); return; }
-    if(!state.size){updateReserve();updateContour();}
-    active = item;
-    if (!expand(item)) { clear(); return; }
+    if(!busy()&&!contourKey)updateContour();
+    active=item;
+    if(!retarget()){clear(true);return;}
     if (settings.indicator) {
       if (!shown) {
         const p = destination();
@@ -433,15 +429,22 @@ function install() {
     indicator.removeAttribute("data-zr-visible");
     if (raf) window.cancelAnimationFrame(raf);
     raf = 0; last = 0; vx = 0;
-    if(immediately){
-      if(geometryFrame)window.cancelAnimationFrame(geometryFrame);geometryFrame=0;geometryPlan=null;
-      for(const item of [...state.keys()])forget(item);
-    }else if(previous||state.size)retarget();
-    if (immediately || !state.size) toolbar.removeAttribute("data-zr-bm-room");
+    if(immediately){stopFlips();resetActive();motionPlan=null;toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
+    else if(previous||state.size)retarget();
   }
 
-  function onPointerMove(event) {
-    if (event.pointerType === "touch" || !toolbarVisible() || event.buttons || openPopups.size) return;
+  function onPointerMove(event){
+    if(event.pointerType==="touch"||event.buttons||openPopups.size||!settings.enabled||dragging)return;
+    const item=event.target?.closest?.("toolbarbutton.bookmark-item");
+    if(item===active&&active){cancelPendingLeave();pointerX=event.clientX;schedule();return;}
+    pendingPointer={target:event.target,clientX:event.clientX,clientY:event.clientY};
+    if(!pointerFrame)pointerFrame=window.requestAnimationFrame(()=>{
+      pointerFrame=0;const p=pendingPointer;pendingPointer=null;
+      if(p&&!dead&&!openPopups.size)processPointer(p);
+    });
+  }
+  function processPointer(event){
+    if(!toolbarVisible())return;
     // Handle the actual native hit target. Do not synthesize clicks or
     // react to pointerenter events generated solely by animated layout.
     const item = event.target?.closest?.("toolbarbutton.bookmark-item");
@@ -484,6 +487,7 @@ function install() {
   }
 
   function onPointerLeave(event) {
+    pendingPointer=null;if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pointerFrame=0;
     if (openPopups.size) return;
     if (event?.type === "pointerleave") queueLeave();
     else clear(true);
@@ -501,8 +505,8 @@ function install() {
     cancelPendingLeave();
     openPopups.add(event.target);
     // Freeze the native folder anchor during opening; collapse after close.
-    if(geometryFrame)window.cancelAnimationFrame(geometryFrame);
-    geometryFrame=0;geometryPlan=null;
+    if(flipTimer)window.clearTimeout(flipTimer);flipTimer=0;
+    for(const a of flips.values())try{a.pause();}catch{}
     if (raf) window.cancelAnimationFrame(raf);
     raf = 0;
     indicator.removeAttribute("data-zr-visible");
@@ -516,18 +520,16 @@ function install() {
 
   const observer = new MutationObserver(() => {
     if (dead) return;
-    for(const item of [...state.keys()])if(item.parentElement!==list)forget(item);
-    if(active&&(!eligible(active)||!toolbarVisible()))clear(true);
-    if(!state.size){updateReserve();scheduleContour();}
-    else if(active&&!eligible(active))clear(true);
+    if(active&&(!eligible(active)||!toolbarVisible())||[...flipNodes].some(n=>n.parentElement!==list))clear(true);
+    if(!busy()){updateReserve();scheduleContour();}
   });
   const resize = new ResizeObserver(() => {
     const next = toolbar.getBoundingClientRect().width;
     if(Math.abs(next-toolbarWidth)>2){toolbarWidth=next;clear(true);}
-    if(!state.size){updateReserve();scheduleContour();}
+    if(!busy()){updateReserve();scheduleContour();}
   });
   const contourObserver=()=>scheduleContour();
-  const panelObserver=new MutationObserver(()=>{if(!state.size)scheduleContour();});
+  const panelObserver=new MutationObserver(()=>{if(!busy())scheduleContour();});
   const prefsObserver = () => {
     if (!refreshFrame) refreshFrame = window.requestAnimationFrame(() => {
       refreshFrame = 0;
@@ -553,7 +555,8 @@ function install() {
     if (dead) return;
     dead = true;
     clear(true);
-    if (refreshFrame) window.cancelAnimationFrame(refreshFrame);
+    if(refreshFrame)window.cancelAnimationFrame(refreshFrame);
+    if(pointerFrame)window.cancelAnimationFrame(pointerFrame);pendingPointer=null;
     observer.disconnect();resize.disconnect();panelObserver.disconnect();
     if(contourFrame)window.cancelAnimationFrame(contourFrame);
     releaseContour();try{prefs.removeObserver(contourPrefix,contourObserver);}catch{}
@@ -566,10 +569,9 @@ function install() {
     toolbar.style.removeProperty("--zr-bm-base-height");
     toolbar.style.removeProperty("--zr-bm-base-pad-bottom");
     toolbar.style.removeProperty("--zr-bm-reserve");
-    geometrySheet.remove();indicator.remove();
+    indicator.remove();
   }
   try {
-    root.append(geometrySheet);
     toolbar.append(indicator);
     toolbarWidth = toolbar.getBoundingClientRect().width;
     readSettings();

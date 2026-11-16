@@ -28,3 +28,9 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Verify real startup flash and WebRender backdrop behavior on Windows; this cannot disable external window animations.
 
 - [ ] Verify CSSOM geometry rules do not emit bookmark style-attribute mutations during hover; confirm smooth handoff between multiple fast hover targets and freeze folder anchor while its menu is open.
+
+## Preview.4 — FLIP
+
+- [ ] One final layout per hover retarget; no per-frame margin/CSSOM writes. Interrupted transitions begin from measured visual positions. The previous slot is cleared before allocating a new one.
+- [ ] The liquid indicator uses cached relative geometry and a fixed-size transform, not per-frame getBoundingClientRect or width/height writes.
+- [ ] Check fast retargeting, native folder anchor pause, overflow, reduced motion, drag and unload; verify actual compositor eligibility and FPS in Zen. Stable OnePlane mask remains unchanged; OnePlane itself may still perform its own bounded contour calculations on structural changes.

@@ -4,7 +4,7 @@
   "description": "Modular visual and usability improvements for Zen Browser: Magnetic Bookmarks and optional startup placeholder suppression.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.4.0-preview.3",
+  "version": "0.4.0-preview.4",
   "style": {
     "chrome": "chrome.css"
   },
@@ -16,7 +16,7 @@
     "animation"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-16T00:33:25.023Z",
+  "updatedAt": "2026-11-16T13:02:19.911Z",
   "fork": [
     "zen"
   ],
