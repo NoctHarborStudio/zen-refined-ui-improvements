@@ -58,6 +58,44 @@
   translate: none !important;
   transition: none !important;
 }
+/* Keep the native button in its original flex slot. The children are
+ * out of flow only while expanding/closing; their real sizes animate
+ * without affecting the parent or its neighbors. WAAPI wins over normal
+ * size/position declarations. Important geometry on the outer box is
+ * deliberate, but child animation properties must not be important. */
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] {
+  box-sizing: border-box !important;
+  width: var(--zr-bm-lock-width) !important;
+  min-width: var(--zr-bm-lock-width) !important;
+  max-width: var(--zr-bm-lock-width) !important;
+  height: var(--zr-bm-lock-height) !important;
+  min-height: var(--zr-bm-lock-height) !important;
+  max-height: var(--zr-bm-lock-height) !important;
+  flex: 0 0 auto !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] > [data-zr-bm-content] {
+  position: absolute !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: var(--zr-bm-content-left);
+  top: var(--zr-bm-content-top);
+  width: var(--zr-bm-content-width);
+  height: var(--zr-bm-content-height);
+  padding-top: var(--zr-bm-content-padding-top);
+  padding-right: var(--zr-bm-content-padding-right);
+  padding-bottom: var(--zr-bm-content-padding-bottom);
+  padding-left: var(--zr-bm-content-padding-left);
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] > .toolbarbutton-text[data-zr-bm-content] {
+  font-size: var(--zr-bm-content-font-size);
+  line-height: var(--zr-bm-content-line-height, normal);
+}
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card]::before {
   content: "";
   position: absolute;

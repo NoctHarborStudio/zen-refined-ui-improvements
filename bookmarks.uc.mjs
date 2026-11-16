@@ -31,7 +31,7 @@ function install() {
   let raf = 0, last = 0, until = 0, cx = 0, cy = 0, w = 14, h = 3, vx = 0;
   let shown = false, toolbarWidth = 0, refreshFrame = 0;
   let leaveTimer=0, flipTimer=0, flipEpoch=0, motionPlan=null, contourFrame=0, contourSurface=null, contourKey="";
-  const flips=new Map(),flipNodes=new Set(),cards=new Map();
+  const flips=new Map(),flipNodes=new Set(),cards=new Map(),contentLocks=new Map();
   let pointerFrame=0,pendingPointer=null,lastIndicatorTransform="",lastPointer=null;
   const FLIP_EASE="cubic-bezier(.333333,0,.666667,1)";
   let baseHeight=0,basePadding=0,reserve=0;
@@ -230,7 +230,75 @@ function install() {
   function pixelRatio(){const n=Number(window.devicePixelRatio);return Number.isFinite(n)&&n>0?n:1;}
   function snapOffset(n){const d=pixelRatio();return Math.round(n*d)/d;}
   function snapGrowth(n){const d=pixelRatio();return Math.max(0,Math.floor(n*d/2+1e-7)*2/d);}
+  // Native content is independent of the decorative card. Freeze the
+  // button's outer box and position its real XUL image/label absolutely
+  // inside it. Only these two children change their native dimensions.
+  const contentProperties=["left","top","width","height","paddingTop","paddingRight","paddingBottom","paddingLeft","fontSize","lineHeight"];
+  const contentVar=k=>"--zr-bm-content-"+k.replace(/[A-Z]/g,c=>"-"+c.toLowerCase());
+  function numeric(v,fallback=0){const n=parseFloat(v);return Number.isFinite(n)?n:fallback;}
+  function readContent(node,r){
+    const result=new Map(),borderX=node.clientLeft||0,borderY=node.clientTop||0;
+    for(const ch of node.querySelectorAll(":scope > .toolbarbutton-icon, :scope > .toolbarbutton-text")){
+      const st=window.getComputedStyle(ch),b=ch.getBoundingClientRect();
+      if(st.display==="none"||st.visibility!=="visible"||b.width<=0||b.height<=0)continue;
+      const text=ch.classList.contains("toolbarbutton-text");
+      const g={left:b.left-r.left-borderX,top:b.top-r.top-borderY,width:b.width,height:b.height,
+        paddingTop:numeric(st.paddingTop),paddingRight:numeric(st.paddingRight),paddingBottom:numeric(st.paddingBottom),paddingLeft:numeric(st.paddingLeft)};
+      if(text){g.fontSize=numeric(st.fontSize,12);if(st.lineHeight!=="normal"&&Number.isFinite(parseFloat(st.lineHeight)))g.lineHeight=parseFloat(st.lineHeight);}
+      result.set(ch,g);
+    }
+    return result;
+  }
+  function contentTarget(g,r,card){
+    // Match preview.5's uniform content enlargement rather than stretching
+    // letters horizontally. Move the entire content group with the new
+    // card center, keeping its original icon/label spacing proportional.
+    const k=Math.min(1.18,card.sx,card.sy),dy=r.height*(card.sy-1)/2;
+    const cx=r.width/2-(r.borderX||0),cy=r.height/2-(r.borderY||0);
+    const out={left:snapOffset(cx+(g.left-cx)*k),top:snapOffset(cy+(g.top-cy)*k+dy),
+      width:g.width*k,height:g.height*k,
+      paddingTop:g.paddingTop*k,paddingRight:g.paddingRight*k,paddingBottom:g.paddingBottom*k,paddingLeft:g.paddingLeft*k};
+    if(g.fontSize!==undefined)out.fontSize=g.fontSize*k;
+    if(g.lineHeight!==undefined)out.lineHeight=g.lineHeight*k;
+    return out;
+  }
+  function unlockContent(node){
+    const children=contentLocks.get(node);if(!children)return;
+    for(const ch of children){
+      ch.removeAttribute("data-zr-bm-content");
+      for(const k of contentProperties)ch.style.removeProperty(contentVar(k));
+    }
+    node.removeAttribute("data-zr-bm-content-lock");
+    node.style.removeProperty("--zr-bm-lock-width");node.style.removeProperty("--zr-bm-lock-height");
+    contentLocks.delete(node);
+  }
+  function contentFrame(g){
+    return Object.fromEntries(contentProperties.filter(k=>g[k]!==undefined).map(k=>[k,g[k]+"px"]));
+  }
+  function lockContent(node,r,base,previous,card,duration){
+    if(!base?.size)return;
+    const children=new Set(base.keys());contentLocks.set(node,children);
+    // The outer dimensions are constant through grow AND shrink.
+    node.style.setProperty("--zr-bm-lock-width",r.width+"px");
+    node.style.setProperty("--zr-bm-lock-height",r.height+"px");
+    node.setAttribute("data-zr-bm-content-lock","true");
+    for(const [ch,g] of base){
+      const from=previous?.get(ch)||g,to=card.opacity===0?g:contentTarget(g,r,card);
+      for(const k of contentProperties){
+        if(to[k]!==undefined)ch.style.setProperty(contentVar(k),to[k]+"px");
+      }
+      ch.setAttribute("data-zr-bm-content","true");
+      // Actual font-size / box dimensions; never transform text or icons.
+      // The lock keeps these changes out of the surrounding flex layout.
+      if(!duration||!contentProperties.some(k=>Math.abs((from[k]??to[k]??0)-(to[k]??from[k]??0))>.01))continue;
+      try{
+        const a=ch.animate([contentFrame(from),contentFrame(to)],{duration,easing:FLIP_EASE,fill:"both"});
+        watchAnimation(ch,a,()=>{});
+      }catch{}
+    }
+  }
   function removeCard(node){
+    unlockContent(node);
     node.removeAttribute("data-zr-bm-card");
     for(const k of ["--zr-bm-card-x","--zr-bm-card-y","--zr-bm-card-opacity"])node.style.removeProperty(k);
     cards.delete(node);
@@ -265,8 +333,8 @@ function install() {
   const restingCard={sx:1,sy:1,opacity:0};
   function cardSample(node){
     const p=cards.get(node);if(!p)return restingCard;
-    // Read the actual animation progress on retarget, not computed style
-    // on every frame. No native label is transformed at any point.
+    // Read actual progress on retarget, not on every frame. Native text
+    // is never transformed; its real dimensions animate independently.
     let t=p.animation&&p.animation.playState!=="finished"?0:1;
     try{const progress=p.animation?.effect?.getComputedTiming().progress;
       if(typeof progress==="number")t=clamp(progress,0,1);
@@ -314,7 +382,7 @@ function install() {
     node.style.setProperty("--zr-bm-card-opacity",String(to.opacity));
     const record={from,to,animation:null};cards.set(node,record);
     if(!duration||Math.abs(from.sx-to.sx)+Math.abs(from.sy-to.sy)+Math.abs(from.opacity-to.opacity)<.0001){
-      if(to.opacity===0)removeCard(node);return;
+      if(to.opacity===0&&!duration)removeCard(node);return;
     }
     try{
       const frame=p=>({transform:"scale("+p.sx+","+p.sy+")",opacity:p.opacity});
@@ -327,11 +395,11 @@ function install() {
       watchAnimation(record,a,()=>{
         if(cards.get(node)!==record)return;
         record.animation=null;
-        if(to.opacity===0)removeCard(node);
+        // endFlip removes the outgoing card after all child effects finish.
       });
     }catch{
       // Static decorative end state is safe; no fallback scales a label.
-      record.animation=null;if(to.opacity===0)removeCard(node);
+      record.animation=null;
     }
   }
   function endFlip(epoch){
@@ -341,13 +409,16 @@ function install() {
     if(!active){motionPlan=null;toolbar.removeAttribute("data-zr-bm-room");scheduleContour();}
   }
   function retarget(){
-    const nodes=visibleRow(),first=new Map(),oldCards=new Map();
+    const nodes=visibleRow(),first=new Map(),oldCards=new Map(),previousContent=new Map(),baseContent=new Map();
     const firstToolbar=box(toolbar.getBoundingClientRect());
     // FIRST: native rects contain only layout coordinates (left/top);
     // the decorative card scales are independent of the native rect.
     for(const n of nodes){
       const r=box(n.getBoundingClientRect());if(r.width>0&&r.height>0)first.set(n,r);
-      if(cards.has(n))oldCards.set(n,cardSample(n));
+      if(cards.has(n)){
+        oldCards.set(n,cardSample(n));
+        if(contentLocks.has(n))previousContent.set(n,readContent(n,r));
+      }
     }
     stopFlips();resetActive();
     const natural=new Map(),bounds=list.getBoundingClientRect(),gap=parseFloat(window.getComputedStyle(list).columnGap)||0;
@@ -365,13 +436,22 @@ function install() {
     const target=active?setActive(active,m,snapGrowth(Math.min(m.width*(settings.scale-1),budget))):null;
     const lastToolbar=box(toolbar.getBoundingClientRect()),last=new Map();
     for(const n of nodes){const r=box(n.getBoundingClientRect());if(r.width>0&&r.height>0)last.set(n,r);}
+    // Read native children before any per-card writes, avoiding read/write
+    // interleaving and preserving the exact resting XUL metrics.
+    for(const [n,b] of last)if(n===active||oldCards.has(n)){
+      b.borderX=n.clientLeft||0;b.borderY=n.clientTop||0;
+      baseContent.set(n,readContent(n,b));
+    }
     const duration=motion.matches?0:settings.duration,start=window.performance.now();
     motionPlan=null;
     for(const [n,b] of last){
       const a=first.get(n)||b,dx=a.left-b.left,dy=a.top-b.top;
       moveNative(n,dx,dy,duration);
       const isActive=n===active,from=oldCards.get(n)||restingCard,to=isActive?target:restingCard;
-      if(isActive||oldCards.has(n))animateCard(n,from,to,duration);
+      if(isActive||oldCards.has(n)){
+        animateCard(n,from,to,duration);
+        if(cards.has(n))lockContent(n,b,baseContent.get(n),previousContent.get(n),to,duration);
+      }
       if(isActive){
         const f=local(a,firstToolbar),l=local(b,lastToolbar);
         motionPlan={start,duration,from:{left:f.left+a.width*(1-from.sx)/2,top:f.top,width:a.width*from.sx,height:a.height*from.sy},

@@ -52,3 +52,10 @@ Known limitations of the untested preview: native overflow measurements can vary
 ## Planned startup animation (not implemented)
 
 - [ ] Investigate browser-chrome initialization, staged UI appearance and a synchronized startup reveal. Preserve existing placeholder preference restoration and respect reduced motion. Do not add artificial startup latency.
+
+## Preview.7 — restore content magnification without text transforms
+
+- [ ] Active label grows using actual font-size; active icon grows using actual width/height; both move down to the expanded card center. Expected for 24px row, 136% card height, 118% inner scale: center descends 4.32px and content grows up to 18%. Narrow width limits magnification.
+- [ ] Outer button box stays fixed; only active and outgoing card children receive native size/position animations. Neighboring labels retain preview.6's positioning and text quality.
+- [ ] Check actual label crop, icons-only/folders, native clicks, light/dark, rapid interrupted transitions and restoration of child attributes/styles on cleanup.
+- [ ] Verify simultaneously on real Zen: sharp text, smooth motion, full content magnification/centering, stable background, no unexpected layout or overflow. Native child font-size animations require main-thread layout/paint; this remains a runtime performance test.

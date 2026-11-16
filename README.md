@@ -12,7 +12,7 @@ A responsive bookmark toolbar with smoothly expanding native bookmarks, top-anch
 
 - 142% horizontal magnification by default, limited by available space.
 - Downward expansion from a higher resting row, 240 ms animation, small 12–18 px indicator.
-- Fixed lower reserve and a shared horizontal expansion budget. With OnePlane, a stable contour mask covers the resting row plus expansion room without changing every hover frame. A FLIP handoff commits the final bookmark slot once. Native bookmark labels/icons move via pixel-aligned relative positioning without a transform; only an empty decorative card scales downwards. The indicator uses cached geometry. Native font size is retained to avoid resampling glyphs. The animation does not resize native bookmark nodes on each frame.
+- Fixed lower reserve and a shared horizontal expansion budget. With OnePlane, a stable contour mask covers the resting row plus expansion room without changing every hover frame. A FLIP handoff commits the final bookmark slot once. Native bookmark labels/icons move via pixel-aligned relative positioning without a transform; only an empty decorative card scales downwards. The indicator uses cached geometry. The active and closing cards animate their actual XUL label font size, icon dimensions, and vertical position (up to 18% content magnification). The outer button is locked to its native dimensions during that effect, so the changing children do not resize surrounding slots. No text or icon transform is used.
 - A spring-based indicator stretches in flight and relaxes at rest.
 - Native bookmark items, click actions and folder menus are retained.
 - Reduced-motion support and individual controls in Sine.
@@ -24,7 +24,7 @@ The optional startup module suppresses Gecko's early blank window and Windows pr
 ## Planned improvements / known issues
 
 - **Startup animation:** the native browser currently appears in stages while its chrome and mods initialize. The placeholder-suppression option removes some early windows, but does not provide a coordinated startup animation. Planned: a polished, unified startup reveal after the browser chrome has initialized, without delaying actual startup or reintroducing a white flash. Investigate Gecko/Sine initialization order, reduced motion, and interaction with OS animations. Not implemented in this preview.
-- **Bookmark text rendering:** animated transforms on text-bearing native nodes can cause blur or glyph shimmer in Gecko/WebRender. Preview.6 removes those transforms from Magnetic Bookmarks. Actual Windows rendering and performance remain to be validated.
+- **Bookmark text rendering:** animated transforms on text-bearing native nodes can cause blur or glyph shimmer in Gecko/WebRender. Preview.6 removed those transforms; preview.7 restores content enlargement using native font/icon sizes. Actual Windows rendering and performance remain to be validated.
 
 ## Install the preview in Sine
 
