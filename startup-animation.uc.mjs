@@ -19,7 +19,7 @@
   const scale=duration/1050;
   const started=now(),deadline=started+2400;
   let dead=false,playing=false,raf=0,timer=0,settled=false,nativeReady=false,readyAt=0,holdNode=null;
-  let nativeObserver=null,cover=null,pageVeil=null,style=null,lateObserver=null,lateFrame=0,playStart=0,finishAt=0,sheetURI=null;
+  let nativeObserver=null,cover=null,pageVeil=null,style=null,lateObserver=null,lateResize=null,lateFrame=0,playStart=0,finishAt=0,sheetURI=null;
   const animations=new Set(),owned=new Map(),seen=new Set();
   const MANAGED="data-zr-startup-managed",EFFECT="data-zr-startup-effect",MOVE="data-zr-startup-move",CLIP="data-zr-startup-clip",PROGRESS="--zr-startup-progress";
   let registered=false;
@@ -40,7 +40,7 @@
     if(raf)window.cancelAnimationFrame(raf);
     if(timer)window.clearTimeout(timer);
     if(lateFrame)window.cancelAnimationFrame(lateFrame);
-    lateObserver?.disconnect();lateObserver=null;
+    lateObserver?.disconnect();lateObserver=null;lateResize?.disconnect();lateResize=null;
     if(nativeObserver)try{Services.obs.removeObserver(nativeObserver,"browser-delayed-startup-finished");}catch{}
     nativeObserver=null;
     for(const a of animations)try{a.cancel();}catch{}
@@ -163,15 +163,15 @@
     return bar.getAttribute("zen-floating-urlbar")==="true"||bar.hasAttribute("zen-newtab")||
       (r&&r.top>100&&r.width>100)?bar:null;
   }
-  function controls(row,url,center,one){
+  function controls(row,url,center,late=false){
     const nav=get("nav-bar"),target=get("nav-bar-customization-target"),candidates=new Set();
     const eligible=n=>n&&n!==row&&n!==url&&!row?.contains(n)&&!url?.contains(n)&&
       n.localName!=="toolbarspring"&&!n.id?.startsWith("oneplane-center-")&&bounds(n,true);
     // Native captions are moved outside customization-target by OnePlane.
     // Include the actual buttons, not the parent and child simultaneously.
     let captions=null;try{captions=window.gZenVerticalTabsManager?.actualWindowButtons;}catch{}
-    const buttonSelector="toolbarbutton,button,.titlebar-button,[role=button]";
-    const roots=[target,nav,captions,get("titlebar-buttonbox"),get("titlebar-buttonbox-container"),get("zen-window-controls")].filter(Boolean);
+    const buttonSelector="toolbarbutton,button,.titlebar-button,[role=button],#titlebar-min,#titlebar-max,#titlebar-restore,#titlebar-close";
+    const roots=[target,nav,captions,get("titlebar-buttonbox"),get("titlebar-buttonbox-container"),get("zen-window-controls"),get("zen-sidebar-top-buttons")].filter(Boolean);
     for(const parent of roots){
       for(const n of parent.querySelectorAll(buttonSelector))if(eligible(n))candidates.add(n);
     }
@@ -185,7 +185,8 @@
     left.sort((a,b)=>b.r.left-a.r.left);right.sort((a,b)=>a.r.left-b.r.left);
     for(const [side,group] of [[-1,left],[1,right]])for(let i=0;i<group.length;i++){
       const {n}=group[i];
-      slide(n,-side*14,-4,260+Math.min(i*32,160),390);
+      if(seen.has(n)||[...seen].some(other=>other.contains(n)||n.contains(other)))continue;
+      reveal(n,{x:-side*14,y:-4,delay:260+Math.min(i*32,160),length:390,late});
     }
   }
   function revealBookmarks(center,late=false){
@@ -206,6 +207,9 @@
       const bar=floatingBar();
       if(bar&&!seen.has(bar))openFromCenter(bar,590,440,true);
       revealBookmarks(window.innerWidth/2,true);
+      const row=get("oneplane-tabs"),url=get("urlbar-container"),island=row?.querySelector(".oneplane-title-island");
+      const r=bounds(island)||bounds(row)||bounds(url);
+      controls(row,url,r?r.left+r.width/2:window.innerWidth/2,true);
     });
   }
   function collectTabs(row,center){
@@ -258,7 +262,7 @@
         const sidebar=get("zen-tabs-wrapper")||get("TabsToolbar");
         const sr=bounds(sidebar);if(sr)slide(sidebar,sr.left<window.innerWidth/2?-18:18,0,155,445);
       }
-      controls(row,url,center,one);
+      controls(row,url,center);
       revealBookmarks(center);
       if(floating)openFromCenter(floating,590,440);
       // Places and Zen's floating input can initialize after chrome-ready.
@@ -266,10 +270,14 @@
       lateObserver=new MutationObserver(scheduleLate);
       lateObserver.observe(root,{subtree:true,childList:true,attributes:true,
         attributeFilter:["zen-floating-urlbar","zen-newtab","hidden","collapsed","open","popover-open"]});
+      if(typeof ResizeObserver==="function"){
+        lateResize=new ResizeObserver(scheduleLate);
+        for(const n of [get("urlbar"),items,bookmarks])if(n)lateResize.observe(n);
+      }
       scheduleLate();
       // Background reveals first; content stays veiled until chrome is in
       // motion. Nothing waits for network loads, remote DOM or a page FCP.
-      play(pageVeil,[{opacity:1},{opacity:0}],470*scale,460*scale,true,FADE);
+      play(pageVeil,[{opacity:1},{opacity:0}],365*scale,410*scale,true,FADE);
       play(cover,[{opacity:1},{opacity:0}],0,230*scale,true,FADE);
       timer=window.setTimeout(finish,Math.max(0,finishAt-now()));
     }catch(error){console.warn("[Zen Refined] Startup reveal failed:",error);finish();}
