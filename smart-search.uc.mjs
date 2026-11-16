@@ -22,11 +22,13 @@
   }
   function selectRecent(entries,maxResults,requested){
     const budget=Math.max(0,Math.min(6,Math.floor(requested)||6,Math.floor(maxResults)-6));
-    // Reserve six native recommendation slots. Current space first, then
-    // other spaces, each sorted by actual last activation, not visit frequency.
+    // Prefer current-space candidates when choosing the six slots. Then
+    // sort the selected pool chronologically so both columns are readable
+    // top to bottom, even when the pool includes other workspaces.
+    const byTime=(a,b)=>Number(!!b.selected)-Number(!!a.selected)||b.last-a.last||a.order-b.order;
     return entries.filter(e=>Number.isFinite(e.last)&&e.last>0)
-      .sort((a,b)=>Number(!!b.selected)-Number(!!a.selected)||Number(b.current)-Number(a.current)||b.last-a.last||a.order-b.order)
-      .slice(0,budget);
+      .sort((a,b)=>Number(!!b.selected)-Number(!!a.selected)||Number(b.current)-Number(a.current)||byTime(a,b))
+      .slice(0,budget).sort(byTime);
   }
   function availableTab(win,tab){
     return !!tab&&(tab.ownerGlobal===win||tab.ownerDocument===win.document&&!!win.document)&&tab.isConnected&&!tab.closing&&

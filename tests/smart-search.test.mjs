@@ -11,10 +11,10 @@ test("only unrestricted empty normal-window tab queries",()=>{
  assert.equal(api.queryAllowed(context,4,false,true),false);
  assert.equal(api.queryAllowed(context,4,true,false),false);
 });
-test("rank current space first, preserve six native slots",()=>{
+test("prefer current space for selection, display by time, reserve six native slots",()=>{
  const entries=[{id:"other",last:100,current:false,order:0},{id:"old",last:10,current:true,order:1},{id:"new",last:20,current:true,order:2},{id:"bad",last:0,current:true,order:3}];
- assert.deepEqual(api.selectRecent(entries,9,6).map(x=>x.id),["new","old","other"]);
- assert.equal(api.selectRecent(entries,7,6).length,1);
+ assert.deepEqual(api.selectRecent(entries,9,6).map(x=>x.id),["other","new","old"]);
+ assert.equal(api.selectRecent(entries,7,6)[0].id,"new");
  assert.equal(api.selectRecent(entries,6,6).length,0);
 });
 function fixture(){
@@ -50,10 +50,10 @@ test("provider uses actual query window and switches exact duplicate URL tab",as
  assert.equal(await P.isActive(context,{browserWindow:{}}),false);
  await P.startQuery({...context,maxResults:9},(_,r)=>results.push(r),controller);
  assert.equal(results.length,3);assert.equal(results[0].payload.zrCurrent,true);
- P.onEngagement(context,controller,{result:results[2],selType:"enter"});
+ P.onEngagement(context,controller,{result:results[1],selType:"enter"});
  assert.equal(f.win.gBrowser.selectedTab,f.b);
  f.win.gBrowser.selectedTab=f.a;f.b.closing=true;
- P.onEngagement(context,controller,{result:results[2],selType:"enter"});
+ P.onEngagement(context,controller,{result:results[1],selType:"enter"});
  assert.equal(f.win.gBrowser.selectedTab,f.a);
 });
 
@@ -179,4 +179,10 @@ test("native grid Tab wraps rows in chronological order",()=>{
  assert.equal(next(-1,12,false),0);assert.equal(next(2,12,false),3);
  assert.equal(next(11,12,false),0);assert.equal(next(0,12,true),11);
  assert.equal(next(-1,12,true),11);assert.equal(next(-1,0,false),-1);
+});
+
+test("space priority chooses the pool, chronology determines display order",()=>{
+ const entries=[{id:"a",last:100,current:true,order:0},{id:"b",last:50,current:true,order:1},{id:"c",last:500,current:false,order:2},{id:"d",last:400,current:false,order:3}];
+ assert.deepEqual(api.selectRecent(entries,9,6).map(x=>x.id),["c","a","b"]);
+ assert.deepEqual(api.selectRecent(entries,8,6).map(x=>x.id),["a","b"]);
 });
