@@ -34,3 +34,8 @@ User reports near-black native search inconsistent with blue-gray toolbar; share
 ### Smart Search registration on preview.17
 
 User console confirms legacy resource:///modules/sessionstore/SessionStore.sys.mjs import failed on Zen 1.24.2b while installed Refined is .17. Already addressed by .18 using canonical moz-src module and optional fallback. Actual .18 registration/results require user confirmation. Do not infer a new .18 failure from the .17 log.
+
+### Center Assembly — missing appearance animation on projected workspace
+
+- Observed: user reports OnePlane preview.29 opens the workspace correctly on another monitor but the normal appearance animation does not play.
+- Status: confirmed user report, queued in roadmap. Root cause not established; inspect startup/first-paint/activation integration before changing code. Existing approved Center Assembly design and native projection behavior must be preserved.
