@@ -2,7 +2,7 @@
 
 A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
-**Current development preview: `0.6.0-preview.16`** · Target: Zen 1.24.2b / Sine 2.3.3.
+**Current development preview: `0.6.0-preview.17`** · Target: Zen 1.24.2b / Sine 2.3.3.
 
 > Preview software. Core features have been tested by the maintainer/user in Zen; compatibility across operating systems, themes and configurations is not guaranteed. Install in a test profile first.
 
@@ -12,6 +12,7 @@ A modular collection of visual and usability enhancements for [Zen Browser](http
 | --- | --- | --- |
 | **Magnetic Bookmarks** | Native bookmark magnification, smooth neighbor movement, downward expansion and spring-based liquid indicator. | User-tested |
 | **Downloads Dock** | Native sidebar indicator, flight notification, edge-connected fluid reveal, recent and full downloads, live transfer data and native file actions. | Core accepted; latest wave refinement pending visual validation |
+| **Smart Search** | Recently active tabs in the empty native address bar, current workspace first, exact tab switching. | First preview; live validation pending |
 | **Page Progress** | Symmetric, center-out page-loading line without percentages. | User-tested |
 | **Center Assembly** | One-shot startup assembly of tabs, address bar, bookmarks and controls without an opaque window cover. | Implemented; startup flash / FPS follow-up deferred |
 | **Center Disassembly** | 520 ms reverse animation on the native close-window command. | User-tested |
@@ -33,6 +34,10 @@ Hover a bookmark to expand its native card downward, with neighbors making space
 ## Page Progress
 
 A small gray loading line grows symmetrically from the top center of the browser. Uses native navigation events and does not display invented percentages. The indicator is independent of the Downloads Dock.
+
+## Smart Search
+
+When the native address bar opens with an empty query (including Ctrl+T when Zen opens its floating search), recent active tabs appear above regular suggestions. Up to four by default, with room for at least two native results. Current workspace and Essentials come first, then other known workspaces by activation time. Each result shows the tab title, workspace/container when available, and Switch to Tab. Selecting it uses the exact existing native tab, including OnePlane's mirrored UI. Typed search and private browsing remain unchanged. No separate history store or network requests. [Architecture](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/smart-search.md).
 
 ## Startup and closing
 
@@ -67,6 +72,7 @@ All options are available through Sine. Individual modules can be disabled indep
 | Center Disassembly | On |
 | Download indicator / transfer statistics | On / On |
 | Page loading indicator | On |
+| Smart Search / recent tab limit | On / 4 |
 
 ## Development pipeline
 
@@ -74,7 +80,7 @@ The following are **planned, not available yet**:
 
 1. **Smart Compact Mode** — intentional edge-hover and multi-monitor behavior, reusing native delay preferences where possible.
 2. **Smart Context Menu** — compact organization and configurable native tab commands.
-3. **Smart Search** — recent active tabs (MRU) in the empty address bar, native tab switching and workspace-aware OnePlane integration.
+Smart Search has entered its first implementation preview; native-browser testing remains pending.
 
 Native Zen Library already provides history search and recently closed tabs, so a separate History Dock is not planned. Other visual refinements will be based on reproducible issues. Semi-Compact Mode and startup performance investigations remain deferred.
 
