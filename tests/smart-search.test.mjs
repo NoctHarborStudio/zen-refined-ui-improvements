@@ -126,3 +126,40 @@ test("6+6 budget and group starts preserve original row order",()=>{
  assert.equal(api.zeroPrefix({searchString:"typed",sapName:"urlbar"},true,true),false);
  assert.equal(api.zeroPrefix({searchString:"",isPrivate:true},true,true),false);
 });
+
+test("actual lifecycle raises only zero-prefix budget, groups native rows and performs one initial recovery",()=>{
+ const fixtureData=fixture(),w=fixtureData.win,providers=new Map(),logs=[],timers=new Map(),events={};let listener,serial=0,queries=0;
+ const node=(result=null)=>{const attrs=new Map();return {result,style:{},children:[],clientWidth:900,hasAttribute:k=>attrs.has(k),getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),removeAttribute:k=>attrs.delete(k),toggleAttribute(k,v){v?attrs.set(k,""):attrs.delete(k);}};};
+ const rows=node();rows.children=[node({providerName:"ZenRefinedRecentTabs"}),node({providerName:"ZenRefinedRecentTabs"}),node({providerName:"native"})];
+ const actual={registerProvider:p=>providers.set(p.name,p),getProvider:n=>providers.get(n),unregisterProvider:p=>providers.delete(p.name)};
+ const original=c=>c.maxResults;
+ const child={startQuery:original,addListener(l){listener=l;},removeListener(l){if(listener===l)listener=null;}};
+ w.addUnloadListener=()=>{};w.addEventListener=()=>{};w.removeEventListener=()=>{};
+ w.setTimeout=fn=>{const n=++serial;timers.set(n,fn);return n;};w.clearTimeout=n=>timers.delete(n);
+ w.gURLBar={controller:child,parentController:{manager:actual},focused:true,value:"",view:{isOpen:true,selectedElement:null,panel:{querySelector:()=>rows},clearTopSitesCache(){}},startQuery(){queries++;},addEventListener:(k,fn)=>events[k]=fn,removeEventListener:k=>delete events[k]};
+ w.gBrowser.tabContainer={addEventListener:(k,fn)=>events[k]=fn,removeEventListener:k=>delete events[k]};
+ const modules={
+  "moz-src:///browser/components/urlbar/UrlbarProvidersManager.sys.mjs":{ProvidersManager:{}},
+  "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs":{UrlbarProvider:class{},UrlbarUtils:fixtureData.utils},
+  "chrome://browser/content/urlbar/UrlbarShared.mjs":{UrlbarShared:{PROVIDER_TYPE:{PROFILE:1}}},
+  "chrome://browser/content/urlbar/UrlbarResult.mjs":{UrlbarResult:class{}},
+  "resource://gre/modules/PrivateBrowsingUtils.sys.mjs":{PrivateBrowsingUtils:{isWindowPrivate:()=>false}},
+  "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs":{SessionStore:fixtureData.session}
+ };
+ const prefs={getBoolPref:()=>true,addObserver(){},removeObserver(){}};
+ new Function("window","document","Services","ChromeUtils","console",source)(w,{documentElement:{hasAttribute:()=>false}},{prefs,obs:{}},{importESModule:p=>modules[p]},{info:m=>logs.push(m),warn:m=>logs.push(m)});
+ assert.equal(child.startQuery({searchString:"",maxResults:5,sapName:"urlbar"}),9);
+ assert.equal(child.startQuery({searchString:"typed",maxResults:5,sapName:"urlbar"}),5);
+ assert.equal(child.startQuery({searchString:"",isPrivate:true,maxResults:5}),5);
+ // The first-ready refresh is coalesced and not repeated.
+ const fire=()=>{const pending=[...timers.values()];timers.clear();for(const fn of pending)fn();};
+ fire();assert.equal(queries,1);events.focusin();fire();assert.equal(queries,1);
+ listener.onQueryResults({searchString:"",results:rows.children.map(r=>r.result)});
+ assert.equal(rows.hasAttribute("data-zr-smart-grid"),true);
+ assert.equal(rows.children[0].getAttribute("data-zr-first"),"Recent tabs");
+ assert.equal(rows.children[2].getAttribute("data-zr-first"),"Recommended");
+ listener.onQueryStarted({searchString:"x"});
+ assert.equal(rows.hasAttribute("data-zr-smart-grid"),false);
+ w.__zenRefinedSmartSearch();assert.equal(child.startQuery,original);assert.equal(timers.size,0);
+ assert.equal(listener,null);
+});
