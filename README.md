@@ -68,3 +68,7 @@ See the [validation checklist](https://github.com/NoctHarborStudio/zen-refined-u
 ## Legacy
 
 Adaptive Page Transitions was retired due to unreliable rendering across websites. Its earlier experimental implementation is archived in [legacy/adaptive-page-transitions](legacy/adaptive-page-transitions/README.md) and is not loaded by Zen Refined.
+
+### Shared Magnetic Bookmarks
+
+Zen Refined is the canonical source of `bookmarks.uc.mjs` and `magnetic-bookmarks.css`. OnePlane bundles the same version locally; no runtime download or dependency is needed. Both use `zen.refined.bookmarks.*` settings and a single per-window lease registry. Disabling either mod leaves the other lease active. OnePlane owns address-wave timing; the bookmark controller suspends its hover and stable-contour effects during that wave. Both updated versions are recommended for compatibility testing.

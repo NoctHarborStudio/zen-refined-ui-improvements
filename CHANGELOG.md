@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0-preview.3
+
+- Make Magnetic Bookmarks a shared window-scoped controller with independent leases for Zen Refined and OnePlane. Retain existing settings and native hover animation.
+- Suspend hover effects and contour recomputation during OnePlane's address wave. Resume after the wave handoff; standalone use has no dependency on OnePlane.
+- Publish canonical magnetic-bookmarks.css and bookmarks.uc.mjs for byte-identical vendoring, with lease lifecycle tests.
+- Preserve the download dock and page progress improvements in preview.2.
+
 ## 0.1.0-preview.3
 
 - Bound bookmark magnification and upward translation to the available vertical space so hovered bookmarks cannot cover the navigation or tab row.

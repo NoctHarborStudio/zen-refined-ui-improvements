@@ -1,0 +1,166 @@
+/* Zen Refined — Magnetic Bookmarks
+ * Scoped to the native bookmarks toolbar and installed window controller.
+ * No changes to tab placement or Compact Mode.
+ */
+#zr-bookmark-indicator { display: none !important; }
+#PersonalToolbar[data-zr-magnetic-enabled] {
+  --zr-bm-duration: 240ms;
+  --zr-bm-ease: cubic-bezier(.2, .8, .2, 1);
+  position: relative !important;
+  overflow: visible !important;
+}
+/* Fixed bottom reserve, never a hover-dependent row height. The original
+ * top padding remains untouched so the resting bookmarks sit higher. */
+#PersonalToolbar[data-zr-magnetic-enabled] {
+  box-sizing: border-box !important;
+  padding-bottom: calc(var(--zr-bm-base-pad-bottom, 0px) + var(--zr-bm-reserve, 17px)) !important;
+  min-height: calc(var(--zr-bm-base-height, 24px) + var(--zr-bm-reserve, 17px)) !important;
+  align-items: flex-start !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
+  align-items: flex-start !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item {
+  align-self: flex-start !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
+  overflow: visible !important;
+}
+/* Text is painted as native text. FLIP uses relative left/top on the
+ * actual nodes; only the empty decorative pseudo-element is scaled. */
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-flip],
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed],
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card] {
+  position: relative !important;
+  left: 0;
+  top: 0;
+  /* Never force a transformed layer for a text-bearing bookmark. */
+  transform: none !important;
+  scale: none !important;
+  translate: none !important;
+  transition: none !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
+  flex-shrink: 0 !important;
+  margin-inline-start: calc(var(--zr-bm-margin-start, 0px) + var(--zr-bm-grow, 0px)) !important;
+  margin-inline-end: calc(var(--zr-bm-margin-end, 0px) + var(--zr-bm-grow, 0px)) !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card] {
+  z-index: 1;
+  overflow: visible !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-active] {
+  z-index: 3;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > :is([data-zr-bm-flip], [data-zr-bm-card]) :is(.toolbarbutton-icon, .toolbarbutton-text) {
+  transform: none !important;
+  scale: none !important;
+  translate: none !important;
+  transition: none !important;
+}
+/* Keep the native button in its original flex slot. The children are
+ * out of flow only while expanding/closing; their real sizes animate
+ * without affecting the parent or its neighbors. WAAPI animates registered
+ * length variables; important inline geometry consumes those same variables
+ * during animation AND at rest, so theme rules cannot snap the icon back. */
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] {
+  box-sizing: border-box !important;
+  width: var(--zr-bm-lock-width) !important;
+  min-width: var(--zr-bm-lock-width) !important;
+  max-width: var(--zr-bm-lock-width) !important;
+  height: var(--zr-bm-lock-height) !important;
+  min-height: var(--zr-bm-lock-height) !important;
+  max-height: var(--zr-bm-lock-height) !important;
+  flex: 0 0 auto !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] > [data-zr-bm-content] {
+  position: absolute !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-inline-size: 0 !important;
+  min-block-size: 0 !important;
+  max-inline-size: none !important;
+  max-block-size: none !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: var(--zr-bm-content-left) !important;
+  top: var(--zr-bm-content-top) !important;
+  width: var(--zr-bm-content-width) !important;
+  height: var(--zr-bm-content-height) !important;
+  padding-top: var(--zr-bm-content-padding-top) !important;
+  padding-right: var(--zr-bm-content-padding-right) !important;
+  padding-bottom: var(--zr-bm-content-padding-bottom) !important;
+  padding-left: var(--zr-bm-content-padding-left) !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] > .toolbarbutton-text[data-zr-bm-content] {
+  font-size: var(--zr-bm-content-font-size) !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .20);
+  transform-origin: center top;
+  transform: scale(var(--zr-bm-card-x, 1), var(--zr-bm-card-y, 1));
+  opacity: var(--zr-bm-card-opacity, 0);
+  pointer-events: none;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-active]::before {
+  pointer-events: auto;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator {
+  display: block !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 8 !important;
+  pointer-events: none !important;
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--toolbar-color, #dce6ff) 75%, #a9c1ff),
+    color-mix(in srgb, var(--toolbar-color, #dce6ff) 90%, #a9c1ff));
+  box-shadow: 0 0 8px color-mix(in srgb, #99b4ff 52%, transparent);
+  opacity: 0;
+  transition: opacity 150ms ease;
+  transform-origin: top left;
+  will-change: transform;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator[data-zr-visible] { opacity: 1 !important; }
+#PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator[data-zr-no-glow] { box-shadow: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed],
+  #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] :is(.toolbarbutton-icon, .toolbarbutton-text),
+  #PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator {
+    transition: none !important;
+  }
+}
+
+/* Integration with OnePlane: use a stable mask calculated from the
+ * resting row. Match its complete activation selector and override only
+ * the surface mask/height, not its tint, blur, panel motion or controls. */
+@media (min-width: 900px) {
+  :root[oneplane-active="true"][zen-compact-mode="true"]:not([customizing], [inDOMFullscreen="true"], [inFullscreen="true"], [popup-window]):has(#nav-bar-customization-target > #oneplane-tabs[data-ready="true"])
+    #zen-appcontent-navbar-wrapper > #oneplane-toolbar-surface[data-zr-bm-stable-contour] {
+    mask-image: var(--zr-bm-contour-mask) !important;
+    mask-size: 100% var(--zr-bm-contour-height) !important;
+    height: max(100%, var(--op-measured-toolbar-height, var(--op-height)), var(--zr-bm-contour-height)) !important;
+  }
+}
+
+@media (min-width: 900px) and (prefers-reduced-transparency: reduce) {
+  :root[oneplane-active="true"][zen-compact-mode="true"]:not([customizing], [inDOMFullscreen="true"], [inFullscreen="true"], [popup-window]):has(#nav-bar-customization-target > #oneplane-tabs[data-ready="true"])
+    #zen-appcontent-navbar-wrapper > #oneplane-toolbar-surface[data-zr-bm-stable-contour] {
+    mask-image: none !important;
+    height: max(100%, var(--op-measured-toolbar-height, var(--op-height))) !important;
+  }
+}
+

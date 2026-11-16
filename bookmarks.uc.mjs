@@ -4,11 +4,12 @@
  */
 const PREFIX = "zen.refined.bookmarks.";
 const CONTROLLER = "__zenRefinedMagneticBookmarks";
+const SHARED = "__zenMagneticBookmarksShared";
+const REVISION = 1;
 const root = document.documentElement;
 const prefs = Services.prefs;
 let disposed = false;
 let startupObserver = null;
-let uninstall = null;
 
 function install() {
   const toolbar = document.getElementById("PersonalToolbar");
@@ -40,6 +41,22 @@ function install() {
   const contourPrefix = "zen.oneplane.fade-";
   const GAP_GRACE_MS = 180;
   let settings = {};
+  let addressSuspended=false, addressPointer=null;
+  function syncAddressState(){
+    const next=root.hasAttribute("data-op-bookmark-wave");
+    if(next===addressSuspended)return;
+    addressSuspended=next;
+    if(next){
+      addressPointer=lastPointer;
+      clear(true);
+    }else{
+      // Do not retarget from layout-generated pointer events.
+      lastPointer=addressPointer;
+      addressPointer=null;
+      updateReserve();
+      scheduleContour();
+    }
+  }
 
   // Measure the native row before enabling our fixed bottom reserve.
   // The old +8px top padding pushed the bookmark row downward.
@@ -109,7 +126,7 @@ function install() {
     contourSurface=null;contourKey="";
   }
   function updateContour(){
-    if(dead)return;
+    if(dead||addressSuspended||root.hasAttribute("data-op-bookmark-wave"))return;
     const surface=document.getElementById("oneplane-toolbar-surface"),row=document.getElementById("oneplane-tabs");
     if(!settings.enabled||!settings.stableBackground||!root.hasAttribute("oneplane-active")||
       root.getAttribute("zen-compact-mode")!=="true"||window.innerWidth<900||
@@ -198,7 +215,8 @@ function install() {
   }
 
   function toolbarVisible() {
-    if (!settings.enabled || toolbar.collapsed || toolbar.hidden ||
+    if (addressSuspended || root.hasAttribute("data-op-bookmark-wave") ||
+      !settings.enabled || toolbar.collapsed || toolbar.hidden ||
       root.hasAttribute("customizing") || root.hasAttribute("inDOMFullscreen") ||
       dragging) return false;
     const rect = toolbar.getBoundingClientRect();
@@ -630,7 +648,12 @@ function install() {
   }
 
   function onPointerMove(event){
-    if(event.pointerType==="touch"||event.buttons||openPopups.size||!settings.enabled||dragging||root.hasAttribute("data-zr-startup-phase"))return;
+    if(event.pointerType==="touch")return;
+    if(addressSuspended||root.hasAttribute("data-op-bookmark-wave")){
+      addressPointer={x:event.clientX,y:event.clientY};return;
+    }
+    if(addressPointer===null&&lastPointer&&!active&&event.clientX===lastPointer.x&&event.clientY===lastPointer.y)return;
+    if(event.buttons||openPopups.size||!settings.enabled||dragging||root.hasAttribute("data-zr-startup-phase"))return;
     const item=event.target?.closest?.("toolbarbutton.bookmark-item");
     const moved=!lastPointer||event.clientX!==lastPointer.x||event.clientY!==lastPointer.y;
     lastPointer={x:event.clientX,y:event.clientY};
@@ -696,7 +719,7 @@ function install() {
     else clear(true);
   }
   function onFocus(event) {
-    if(root.hasAttribute("data-zr-startup-phase"))return;
+    if(addressSuspended||root.hasAttribute("data-op-bookmark-wave")||root.hasAttribute("data-zr-startup-phase"))return;
     const item = event.target?.closest?.("toolbarbutton.bookmark-item");
     if (eligible(item) && item.matches(":focus-visible")) select(item, null);
   }
@@ -725,10 +748,13 @@ function install() {
 
   const observer = new MutationObserver(() => {
     if (dead) return;
+    syncAddressState();
+    if(addressSuspended)return;
     if(active&&(!eligible(active)||!toolbarVisible())||[...flipNodes,...cards.keys()].some(n=>n.parentElement!==list))clear(true);
     if(!busy()){updateReserve();scheduleContour();}
   });
   const resize = new ResizeObserver(() => {
+    if(addressSuspended)return;
     const next = toolbar.getBoundingClientRect().width;
     if(Math.abs(next-toolbarWidth)>2){toolbarWidth=next;clear(true);}
     if(!busy()){updateReserve();scheduleContour();}
@@ -783,7 +809,8 @@ function install() {
     for (const [target, type, listener, capture] of listeners) target.addEventListener(type, listener, capture);
     observer.observe(list,{childList:true,subtree:true,attributes:true,attributeFilter:["hidden","collapsed","label","overflowed"]});
     observer.observe(toolbar, { attributes: true, attributeFilter: ["hidden", "collapsed"] });
-    observer.observe(root,{attributes:true,attributeFilter:["customizing","inDOMFullscreen","oneplane-active","zen-compact-mode"]});
+    observer.observe(root,{attributes:true,attributeFilter:["customizing","inDOMFullscreen","oneplane-active","zen-compact-mode","data-op-bookmark-wave"]});
+    syncAddressState();
     if(wrapper)panelObserver.observe(wrapper,{childList:true,subtree:false,attributes:true,attributeFilter:["data-op-panel-open"]});
     resize.observe(toolbar);
     if(navbar)resize.observe(navbar);
@@ -794,8 +821,52 @@ function install() {
     destroy();
     throw error;
   }
-  return destroy;
+  return {destroy,syncAddressState};
 }
+
+// One shared native controller per browser window, regardless of which
+// Sine mod registered it first. Identical standalone copies register
+// independent leases. Legacy scripts yield the controller safely.
+function createSharedRegistry(){
+  const clients=new Set();
+  let controller=null,scheduled=false;
+  const registry={revision:REVISION,clients,
+    syncAddressState(){controller?.syncAddressState();},
+    acquire(token){clients.add(token);ensure();},
+    release(token){
+      clients.delete(token);
+      if(clients.size)return;
+      stop();
+      if(window[SHARED]===registry)delete window[SHARED];
+    }};
+  function stop(){
+    controller?.destroy();controller=null;
+    if(window[CONTROLLER]===legacyLease)delete window[CONTROLLER];
+  }
+  function legacyLease(){
+    // An older Refined copy may call this before registering itself.
+    // Yield synchronously, then reclaim after its synchronous startup
+    // has returned. Never run two installed controllers at once.
+    stop();
+    if(!clients.size||scheduled)return;
+    scheduled=true;
+    window.queueMicrotask(()=>{scheduled=false;if(clients.size)ensure();});
+  }
+  function ensure(){
+    if(!clients.size||window.closed)return;
+    if(controller&&window[CONTROLLER]===legacyLease)return;
+    if(controller)stop();
+    const legacy=window[CONTROLLER];
+    if(typeof legacy==="function"&&legacy!==legacyLease)legacy();
+    window[CONTROLLER]=legacyLease;
+    try{controller=install();}
+    catch(error){stop();throw error;}
+    if(!controller&&window[CONTROLLER]===legacyLease)delete window[CONTROLLER];
+  }
+  return registry;
+}
+const lease={};
+let shared=null;
 
 function cleanup() {
   if (disposed) return;
@@ -804,21 +875,21 @@ function cleanup() {
     Services.obs.removeObserver(startupObserver, "browser-delayed-startup-finished");
     startupObserver = null;
   }
-  uninstall?.();
-  uninstall = null;
+  shared?.release(lease);
+  shared=null;
   window.removeEventListener("unload", cleanup);
-  if (window[CONTROLLER] === cleanup) delete window[CONTROLLER];
 }
 
 function start() {
   if (disposed || window.closed) return;
-  try { uninstall = install(); }
+  try {
+    shared=window[SHARED]??(window[SHARED]=createSharedRegistry());
+    shared.acquire(lease);
+  }
   catch (error) { console.error("[Zen Refined] Magnetic Bookmarks:", error); cleanup(); }
 }
 
 if (!root.hasAttribute("popup-window") && typeof window.addUnloadListener === "function") {
-  window[CONTROLLER]?.();
-  window[CONTROLLER] = cleanup;
   window.addUnloadListener(cleanup);
   window.addEventListener("unload", cleanup, { once: true });
   if (window.gBrowserInit?.delayedStartupFinished) start();

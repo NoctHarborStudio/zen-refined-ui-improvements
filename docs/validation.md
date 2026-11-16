@@ -103,3 +103,9 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Start download from a real click: 620ms curved flight lands on dock icon, detail card opens inward with clearance, 3000ms hold then retracts. Clicking icon reopens; card opens native downloads. Very fast files, multiple downloads, cancellation, unknown total, private windows, history replay and reduced motion.
 - [ ] OnePlane fallback and host contract; resize, side preference, hot reload/unload, no duplicate nodes/listeners. Verify no progress-triggered geometry reads.
 - [ ] Page bar grows from center symmetrically; slower interpolation, unknown opacity pulse, no percentage, success/cancel and tab switching.
+
+## Shared Magnetic Bookmarks (0.6.0-preview.3)
+
+Test Refined only, OnePlane only, both installation/load orders, both disable orders and Sine hot reload. Confirm exactly one #zr-bookmark-indicator and one shared controller per window. Existing zen.refined.bookmarks settings persist. Verify no hover retarget while OnePlane address-wave attribute is present, native bookmark text and folder actions, reduced motion and cleanup. Registry lease logic tested with stubs; actual Zen runtime remains unverified.
+
+Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regression tests. When mixing a new shared build with a legacy build, update both; disabling the last shared copy after it replaced a legacy controller can require restarting the remaining legacy mod.
