@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 const source=readFileSync(new URL("../smart-search.uc.mjs",import.meta.url),"utf8");
 const start=source.indexOf("function outerId("),end=source.indexOf("let manager=null",start);
-const api=new Function("prefs","PREF","LIMIT","NAME","TYPE",source.slice(start,end)+"return {queryAllowed,selectRecent,availableTab,eligibleUrl,collect,validTarget,remember,makeProvider};")({getBoolPref:()=>true,getIntPref:()=>4},"enable","limit","provider","zr-recent-tab");
+const api=new Function("prefs","PREF","LIMIT","NAME","TYPE",source.slice(start,end)+"return {queryAllowed,selectRecent,availableTab,eligibleUrl,collect,validTarget,remember,makeProvider,relativeTime,resultBudget,groupPlan,zeroPrefix};")({getBoolPref:()=>true,getIntPref:()=>4},"enable","limit","provider","zr-recent-tab");
 const context={searchString:"",isPrivate:false,sources:[4]};
 test("only unrestricted empty normal-window tab queries",()=>{
  assert.equal(api.queryAllowed(context,4,true,true),true);
@@ -11,11 +11,11 @@ test("only unrestricted empty normal-window tab queries",()=>{
  assert.equal(api.queryAllowed(context,4,false,true),false);
  assert.equal(api.queryAllowed(context,4,true,false),false);
 });
-test("rank current space first, preserve two native slots",()=>{
+test("rank current space first, preserve six native slots",()=>{
  const entries=[{id:"other",last:100,current:false,order:0},{id:"old",last:10,current:true,order:1},{id:"new",last:20,current:true,order:2},{id:"bad",last:0,current:true,order:3}];
- assert.deepEqual(api.selectRecent(entries,5,4).map(x=>x.id),["new","old","other"]);
- assert.equal(api.selectRecent(entries,3,4).length,1);
- assert.equal(api.selectRecent(entries,2,4).length,0);
+ assert.deepEqual(api.selectRecent(entries,9,6).map(x=>x.id),["new","old","other"]);
+ assert.equal(api.selectRecent(entries,7,6).length,1);
+ assert.equal(api.selectRecent(entries,6,6).length,0);
 });
 function fixture(){
  const win={closed:false,gBrowser:{},gZenWorkspaces:{activeWorkspace:"A",getWorkspaces:()=>[{uuid:"A",name:"Free"},{uuid:"B",name:"Work"}]}};
@@ -31,7 +31,7 @@ function fixture(){
 }
 test("native identity, workspace and lazy metadata without remote reads",()=>{
  const f=fixture(),rows=api.collect(f.win,f.session,f.utils);
- assert.equal(rows.length,2);assert.equal(rows[0].tab,f.a);assert.equal(rows[1].tab,f.b);
+ assert.equal(rows.length,3);assert.equal(rows[0].tab,f.a);assert.equal(rows[1].tab,f.b);assert.equal(rows[2].selected,true);
  assert.equal(rows[1].container,"Work container");assert.equal(rows[1].workspace,"Work");
  assert.equal(api.validTarget(f.win,rows[1],f.session),true);
  f.b.closing=true;assert.equal(api.validTarget(f.win,rows[1],f.session),false);
@@ -48,12 +48,12 @@ test("provider uses actual query window and switches exact duplicate URL tab",as
  const controller={browserWindow:f.win},results=[];
  assert.equal(await P.isActive(context,controller),true);
  assert.equal(await P.isActive(context,{browserWindow:{}}),false);
- await P.startQuery({...context,maxResults:5},(_,r)=>results.push(r),controller);
- assert.equal(results.length,2);
- P.onEngagement(context,controller,{result:results[1],selType:"enter"});
+ await P.startQuery({...context,maxResults:9},(_,r)=>results.push(r),controller);
+ assert.equal(results.length,3);assert.equal(results[0].payload.zrCurrent,true);
+ P.onEngagement(context,controller,{result:results[2],selType:"enter"});
  assert.equal(f.win.gBrowser.selectedTab,f.b);
  f.win.gBrowser.selectedTab=f.a;f.b.closing=true;
- P.onEngagement(context,controller,{result:results[1],selType:"enter"});
+ P.onEngagement(context,controller,{result:results[2],selType:"enter"});
  assert.equal(f.win.gBrowser.selectedTab,f.a);
 });
 
@@ -84,7 +84,7 @@ test("actual script registers with Gecko 160 SessionStore path and survives miss
 
 test("workspace collection can be incomplete; native tabs are still included",()=>{
  const f=fixture();f.win.gZenWorkspaces.allStoredTabs=[];
- assert.equal(api.collect(f.win,f.session,f.utils).length,2);
+ assert.equal(api.collect(f.win,f.session,f.utils).length,3);
 });
 test("native view listener reports final result counts and detaches on unload",()=>{
  const w={gBrowser:{},addUnloadListener(){},addEventListener(){},removeEventListener(){}};
@@ -105,4 +105,24 @@ test("native view listener reports final result counts and detaches on unload",(
  assert.equal(w.__zenRefinedSmartSearchStatus().visible,1);
  assert.equal(logs.at(-1),"[Zen Refined] Smart Search native finished: recent=1 total=2");
  w.__zenRefinedSmartSearch();assert.equal(listener,null);assert.equal(providers.size,0);
+});
+
+test("current tab is immediate, explicit activation outranks stale timestamp",()=>{
+ const f=fixture(),activity=new WeakMap();activity.set(f.a,Date.now()-1200);
+ const rows=api.selectRecent(api.collect(f.win,f.session,f.utils,activity),12,6);
+ assert.equal(rows[0].tab,f.selected);assert.equal(rows[1].tab,f.a);
+ assert.equal(api.relativeTime(rows[0].last,true),"Now");
+ assert.equal(api.relativeTime(1000,false,181000),"3m ago");
+ assert.equal(api.relativeTime(1000,false,7201000),"2h ago");
+});
+test("6+6 budget and group starts preserve original row order",()=>{
+ const e=Array.from({length:9},(_,i)=>({last:i+1}));
+ assert.equal(api.resultBudget(e),12);
+ assert.equal(api.resultBudget(e.slice(0,3)),9);
+ assert.equal(api.selectRecent(e,12,6).length,6);
+ const recent={payload:{dynamicType:"zr-recent-tab"}},native={providerName:"native"};
+ assert.deepEqual(api.groupPlan([recent,recent,recent,native,native]).map(x=>[x.group,x.first,x.top]),[["recent",true,true],["recent",false,true],["recent",false,false],["recommended",true,true],["recommended",false,true]]);
+ assert.equal(api.zeroPrefix({searchString:"",sapName:"urlbar"},true,true),true);
+ assert.equal(api.zeroPrefix({searchString:"typed",sapName:"urlbar"},true,true),false);
+ assert.equal(api.zeroPrefix({searchString:"",isPrivate:true},true,true),false);
 });

@@ -21,3 +21,7 @@ Use the native Library's moz-src SessionStore path; the former resource alias is
 ## Preview.19
 
 Automatic Browser Console messages identify the provider manager, native query start, eligibility, candidate count, emission and final native result count. No typed text, URLs or titles are logged. Actual address-bar manager and controller identity are preferred, and both native tab and workspace collections are consulted. No global most-recent-window fallback.
+
+## Preview.20
+
+The approved 6+6 grid replaces the initial four-item limit. Only the eligible zero-prefix context budget changes, no global preferences. Native rows retain their order, click and Enter handling; CSS adds two columns and visual group labels with single-column fallback below 530px. Current tab is included, native lastSeenActive and per-window weak activation timestamps are used, and time is computed on query. Startup recovery is bounded and gated on a focused eligible input, not forced opening. Runtime visual/keyboard validation remains pending.

@@ -152,3 +152,7 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Check actual provider priority, row rendering, native keyboard selection, workspace transition, no network preloading and no duplicate provider after multiple window lifecycles.
 
 - [ ] Preview.18: verify `[Zen Refined] Smart Search provider ready` and `window.__zenRefinedSmartSearchStatus?.()` in Browser Console after opening an empty address bar. Verify actual rows, not just successful import.
+
+## Preview.20 Smart Search grid
+
+- [ ] Cold start first floating search, active/new tab before leaving it, 6+6 native results when available, missing results, narrow / wide, OnePlane and standalone. Native Tab/arrow/Enter/mouse still choose correct tab; type text to exit grid. Check no focus stealing after Escape and no private results. Verify settings toggle/unload removes layout and query wrapper.

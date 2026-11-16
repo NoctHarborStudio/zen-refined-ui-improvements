@@ -158,35 +158,5 @@
     "property": "zen.refined.smart-search.enabled",
     "label": "Smart Search — recent active tabs",
     "defaultValue": true
-  },
-  {
-    "type": "dropdown",
-    "property": "zen.refined.smart-search.limit",
-    "label": "Recent tab suggestions (maximum)",
-    "value": "number",
-    "defaultValue": 4,
-    "placeholder": false,
-    "options": [
-      {
-        "label": "2",
-        "value": 2
-      },
-      {
-        "label": "3",
-        "value": 3
-      },
-      {
-        "label": "4",
-        "value": 4
-      },
-      {
-        "label": "5",
-        "value": 5
-      },
-      {
-        "label": "6",
-        "value": 6
-      }
-    ]
   }
 ]

@@ -2,7 +2,7 @@
 
 A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
-**Current development preview: `0.6.0-preview.19`** · Target: Zen 1.24.2b / Sine 2.3.3.
+**Current development preview: `0.6.0-preview.20`** · Target: Zen 1.24.2b / Sine 2.3.3.
 
 > Preview software. Core features have been tested by the maintainer/user in Zen; compatibility across operating systems, themes and configurations is not guaranteed. Install in a test profile first.
 
@@ -37,7 +37,7 @@ A small gray loading line grows symmetrically from the top center of the browser
 
 ## Smart Search
 
-When the native address bar opens with an empty query (including Ctrl+T when Zen opens its floating search), recent active tabs appear above regular suggestions. Up to four by default, with room for at least two native results. Current workspace and Essentials come first, then other known workspaces by activation time. Each result shows the tab title, workspace/container when available, and Switch to Tab. Selecting it uses the exact existing native tab, including OnePlane's mirrored UI. Typed search and private browsing remain unchanged. No separate history store or network requests. [Architecture](docs/smart-search.md).
+When the native address bar opens with an empty query (including Ctrl+T when Zen opens its floating search), recent active tabs appear above regular suggestions. Two grouped sections, up to six recent tabs and six native recommendations, two columns where space permits. Relative activity time on the left; the active tab is included. Current workspace and Essentials come first, then other known workspaces by activation time. Each result shows the tab title, workspace/container when available, and Switch to Tab. Selecting it uses the exact existing native tab, including OnePlane's mirrored UI. Typed search and private browsing remain unchanged. No separate history store or network requests. [Architecture](docs/smart-search.md).
 
 ## Startup and closing
 
@@ -72,7 +72,7 @@ All options are available through Sine. Individual modules can be disabled indep
 | Center Disassembly | On |
 | Download indicator / transfer statistics | On / On |
 | Page loading indicator | On |
-| Smart Search / recent tab limit | On / 4 |
+| Smart Search (6 recent + 6 recommended) | On |
 
 ## Development pipeline
 

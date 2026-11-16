@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0-preview.20
+
+- Implement the approved grouped Smart Search 2×3 + 2×3 layout using native selectable rows, with left-side activity timestamps and current-tab inclusion. Narrow panels fall back to one column. Preserve typed search and native recommendations; no global result-limit preference change.
+- Track TabSelect immediately and clear zero-prefix cache, with bounded first-open refresh after readiness. Actual cold-start and OnePlane rendering still need validation.
+
 ## 0.6.0-preview.19
 
 - Attach Smart Search to the actual address-bar provider manager, resolve owning windows by native identity or controller, and combine workspace and native tab collections. Automatically log count-only query eligibility, emitted rows and final native result counts; no console commands needed. Runtime display verification pending.

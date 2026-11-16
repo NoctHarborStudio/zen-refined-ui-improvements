@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.6.0-preview.19`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.20`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -93,3 +93,7 @@ User confirms native recent-tab rows now appear in standalone Zen and OnePlane. 
 ## Center Assembly — projected workspace window appearance
 
 User confirms OnePlane preview.29 workspace projection and search now work, but opening a workspace by dragging it onto another monitor displays the new window without the usual appearance animation. Add this to Zen Refined's general visual improvement pipeline. Reuse the accepted Center Assembly choreography, not a second independent animation; investigate whether projection readiness, early-paint gating or window activation prevents the existing path from running. Exact cause is unverified. Distinguish chrome animation (mod-owned) from native OS window animation (not guaranteed). Coordinate with OnePlane through an optional lifecycle-owned readiness signal only if needed; Refined must continue to work standalone. Do not delay or redo native Snap, workspace selection, synchronization, transparent placeholder or floating search; no opaque full-window overlay, re-hiding painted content, duplicate animations, tab creation or focus theft. Preserve reduced-motion, cancellation/unload behavior and accepted ordinary startup/closing animation. Test active/inactive workspace projection, left/right monitors, center/side/maximize, ordinary new window and cold start, Refined with/without OnePlane. Queued; no runtime change or new Sine release.
+
+## Smart Search preview.20 — approved grouped grid implemented
+
+User approved up to six recent tabs and six recommended results, each 2 columns × 3 rows. Native rows stay in DOM order; headings are visual only, timing on the left, current tab included. Narrow panels use one column. Scoped query budget, immediate activation tracking and a bounded first-open recovery are implemented. The exact startup failure and actual rendering/selection still require Zen testing. OnePlane consumes the same shared native layout; its further visual polish remains queued.

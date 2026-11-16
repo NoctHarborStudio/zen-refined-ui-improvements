@@ -5,7 +5,7 @@
 (() => {
   const KEY="__zenRefinedSmartSearch",REGISTRY="__zenRefinedSmartSearchRegistry";
   const NAME="ZenRefinedRecentTabs",TYPE="zr-recent-tab",STATUS="__zenRefinedSmartSearchStatus";
-  const PREF="zen.refined.smart-search.enabled",LIMIT="zen.refined.smart-search.limit";
+  const PREF="zen.refined.smart-search.enabled";
   const prefs=Services.prefs;
   const root=document.documentElement;
   if(typeof window.addUnloadListener!=="function"||root.hasAttribute("popup-window"))return;
@@ -21,11 +21,11 @@
       !!context.sources?.includes(source);
   }
   function selectRecent(entries,maxResults,requested){
-    const budget=Math.max(0,Math.min(6,Math.floor(requested)||4,Math.floor(maxResults)-2));
-    // Keep at least two native suggestion slots. Current space first, then
+    const budget=Math.max(0,Math.min(6,Math.floor(requested)||6,Math.floor(maxResults)-6));
+    // Reserve six native recommendation slots. Current space first, then
     // other spaces, each sorted by actual last activation, not visit frequency.
     return entries.filter(e=>Number.isFinite(e.last)&&e.last>0)
-      .sort((a,b)=>Number(b.current)-Number(a.current)||b.last-a.last||a.order-b.order)
+      .sort((a,b)=>Number(!!b.selected)-Number(!!a.selected)||Number(b.current)-Number(a.current)||b.last-a.last||a.order-b.order)
       .slice(0,budget);
   }
   function availableTab(win,tab){
@@ -37,7 +37,7 @@
     return typeof url==="string"&&/^(https?:|file:|about:)/i.test(url)&&
       !/^about:(blank|newtab|home|privatebrowsing)([?#]|$)/i.test(url);
   }
-  function collect(win,sessionStore,utils){
+  function collect(win,sessionStore,utils,activity){
     const browser=win.gBrowser,spaces=win.gZenWorkspaces;
     if(!browser||!browser.selectedTab)return [];
     const active=spaces?.activeWorkspace||"";
@@ -49,7 +49,7 @@
     try{for(const s of spaces?.getWorkspaces?.()||[])names.set(s.uuid,s.name);}catch{}
     const entries=[],seen=new Set();
     for(const tab of tabs){
-      if(seen.has(tab)||tab===browser.selectedTab||!availableTab(win,tab))continue;
+      if(seen.has(tab)||!availableTab(win,tab))continue;
       seen.add(tab);
       try{
         // Use the session-store lazy value rather than touching remote
@@ -67,8 +67,9 @@
         let container="";
         try{if(containerId)container=utils.getUserContextData(containerId)?.label||String(containerId);}catch{}
         const title=String(tab.getAttribute("zen-static-label")||tab.label||url).slice(0,300);
-        const last=Number(tab.lastAccessed);
-        entries.push({tab,url,title,last,current,spaceId,containerId,order:entries.length,
+        const selected=tab===browser.selectedTab;
+        const last=selected?Date.now():activity?.get(tab)||Number(tab.lastSeenActive||tab.lastAccessed);
+        entries.push({tab,url,title,last,selected,current,spaceId,containerId,order:entries.length,
           workspace:essential?"Essentials":String(names.get(spaceId)||""),container});
       }catch{}
     }
@@ -84,6 +85,32 @@
         Number(tab.getAttribute("usercontextid")||0)===entry.containerId&&
         (tab.getAttribute("zen-workspace-id")||"")===entry.spaceId;
     }catch{return false;}
+  }
+  function relativeTime(last,selected,now=Date.now()){
+    const seconds=Math.max(0,Math.floor((now-last)/1000));
+    if(selected||seconds<60)return "Now";
+    if(seconds<3600)return Math.floor(seconds/60)+"m ago";
+    if(seconds<86400)return Math.floor(seconds/3600)+"h ago";
+    return Math.floor(seconds/86400)+"d ago";
+  }
+  function domain(url){
+    try{const u=new URL(url);return u.hostname||u.protocol+u.pathname;}catch{return url;}
+  }
+  function zeroPrefix(context,enabled,openpage){
+    return enabled&&openpage&&!context.isPrivate&&context.searchString===""&&
+      (!context.sapName||context.sapName==="urlbar")&&!context.searchMode&&!context.restrictSource&&
+      !context.restrictInSearchMode?.()&&(!context.sources?.length||context.sources.length!==1);
+  }
+  function resultBudget(entries){
+    return Math.min(6,entries.filter(e=>Number.isFinite(e.last)&&e.last>0).length)+6;
+  }
+  function groupPlan(rows){
+    const counts={recent:0,recommended:0};
+    return rows.map(r=>{
+      const group=r?.providerName===NAME||r?.payload?.dynamicType===TYPE?"recent":"recommended";
+      const index=counts[group]++;
+      return {group,index,first:index===0,top:index<2};
+    });
   }
   function remember(state,entry){
     const token=String(++state.sequence);
@@ -136,17 +163,17 @@
         const scope=this.state(controller);
         if(!scope||!queryAllowed(context,Shared.RESULT_SOURCE.TABS,prefs.getBoolPref(PREF,true),prefs.getBoolPref("browser.urlbar.suggest.openpage",true)))return;
         const {win,state}=scope;
-        const candidates=collect(win,sessionStore,utils);
-        const entries=selectRecent(candidates,context.maxResults,prefs.getIntPref(LIMIT,4));
+        const candidates=collect(win,sessionStore,utils,state.activity);
+        const entries=selectRecent(candidates,context.maxResults,6);
         if(state.diagnostic){state.diagnostic.started=true;state.diagnostic.candidates=candidates.length;state.diagnostic.emitted=0;}
         for(let i=0;i<entries.length;i++){
           const e=entries[i],token=remember(state,e);
-          const detail=[i===0?"Recent tabs":"Recent tab",e.workspace,e.container].filter(Boolean).join(" · ");
+          const detail=[domain(e.url),!e.current?e.workspace:"",e.container].filter(Boolean).join(" · ");
           try{add(this,new Result({
             type:Shared.RESULT_TYPE.DYNAMIC,source:Shared.RESULT_SOURCE.TABS,
             suggestedIndex:i,
             payload:{dynamicType:TYPE,zrToken:token,zrTitle:e.title,zrDetail:detail,
-              zrIcon:Shared.getIconForUrl(e.url)}
+              zrIcon:Shared.getIconForUrl(e.url),zrTime:relativeTime(e.last,e.selected),zrCurrent:!!e.selected}
           }));if(state.diagnostic)state.diagnostic.emitted++;}
           catch(e){if(state.diagnostic)state.diagnostic.error=String(e);console.warn("[Zen Refined] Smart Search result:",e);}
         }
@@ -154,19 +181,23 @@
       }
       getViewTemplate(){
         return {attributes:{selectable:true},children:[
+          {name:"time",tag:"span",classList:["zr-smart-time"]},
           {name:"icon",tag:"img",classList:["urlbarView-favicon"]},
-          {name:"title",tag:"span",classList:["urlbarView-title"],overflowable:true},
-          {name:"detail",tag:"span",classList:["urlbarView-url"],overflowable:true},
+          {name:"body",tag:"span",classList:["zr-smart-body"],children:[
+            {name:"title",tag:"span",classList:["urlbarView-title"],overflowable:true},
+            {name:"detail",tag:"span",classList:["urlbarView-url"],overflowable:true}
+          ]},
           {name:"action",tag:"span",classList:["urlbarView-action","urlbarView-switchToTab"]}
         ]};
       }
       getViewUpdate(result){
         const p=result.payload;
         return {
+          time:{textContent:p.zrTime},
           icon:{attributes:{src:p.zrIcon||"chrome://global/skin/icons/defaultFavicon.svg"}},
           title:{textContent:p.zrTitle,attributes:{dir:"auto"}},
           detail:{textContent:p.zrDetail,attributes:{dir:"auto"}},
-          action:{textContent:"Switch to Tab"}
+          action:{textContent:p.zrCurrent?"Current tab":"Switch to Tab"}
         };
       }
       onEngagement(context,controller,details){
@@ -186,9 +217,72 @@
     };
   }
   let manager=null,registry=null,disposed=false,observer=null,joined=false,listener=null,child=null,parent=null,windowId=null;
-  const diagnostic={version:3,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
+  let bar=null,tabContainer=null,originalQuery=null,wrappedQuery=null,layoutRows=null,resizeObserver=null,openObserver=null,readyObserver=null,prefObserver=null,refreshTimer=0,inFlight=false,initialRecovered=false,ready=false,activeContext=null,windowState=null;
+  const diagnostic={version:4,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
   const status=()=>({...diagnostic,registered:!!joined&&manager?.getProvider?.(NAME)===registry?.provider});
   window[STATUS]=status;
+  const ROW_ATTRS=["data-zr-group","data-zr-first","data-zr-top"];
+  function clearLayout(){
+    if(!layoutRows)return;
+    layoutRows.removeAttribute("data-zr-smart-grid");
+    layoutRows.removeAttribute("data-zr-narrow");
+    for(const row of layoutRows.children)for(const a of ROW_ATTRS)row.removeAttribute(a);
+  }
+  function layout(context){
+    if(!bar?.view?.isOpen||!context||!zeroPrefix(context,prefs.getBoolPref(PREF,true),prefs.getBoolPref("browser.urlbar.suggest.openpage",true))){clearLayout();return;}
+    const rows=bar.view.panel?.querySelector(".urlbarView-results")||bar.querySelector?.(".urlbarView-results");
+    if(!rows)return;
+    if(layoutRows!==rows){clearLayout();resizeObserver?.disconnect();layoutRows=rows;
+      if(window.ResizeObserver){resizeObserver=new window.ResizeObserver(()=>{if(layoutRows===rows&&rows.hasAttribute("data-zr-smart-grid"))rows.toggleAttribute("data-zr-narrow",rows.clientWidth<530);});resizeObserver.observe(rows);}
+    }
+    const visible=Array.from(rows.children).filter(row=>row.result&&!row.hidden&&!row.hasAttribute("hidden")&&!row.hasAttribute("stale")&&row.style.display!=="none");
+    // Never insert or reorder native children: Gecko owns rowIndex and all
+    // keyboard/ARIA selection. During stale handoff keep its native layout.
+    if(!visible.length||Array.from(rows.children).some(r=>r.hasAttribute("stale"))){clearLayout();return;}
+    const plan=groupPlan(visible.map(r=>r.result));
+    let nativeSeen=false;
+    for(const p of plan){if(p.group==="recommended")nativeSeen=true;else if(nativeSeen){clearLayout();return;}}
+    clearLayout();
+    visible.forEach((row,i)=>{
+      const p=plan[i];row.setAttribute("data-zr-group",p.group);
+      row.toggleAttribute("data-zr-top",p.top);
+      if(p.first)row.setAttribute("data-zr-first",p.group==="recent"?"Recent tabs":"Recommended");
+    });
+    rows.toggleAttribute("data-zr-narrow",rows.clientWidth<530);
+    rows.setAttribute("data-zr-smart-grid","true");
+  }
+  function eligibleInput(){
+    return !!bar?.focused&&!bar.searchMode&&!bar._suppressStartQuery&&
+      (bar.value===""||bar.getAttribute?.("pageproxystate")==="valid")&&
+      prefs.getBoolPref(PREF,true)&&prefs.getBoolPref("browser.urlbar.suggest.openpage",true)&&
+      !bar.inOverflowPanel&&(bar.view?.isOpen||bar.hasAttribute?.("zen-newtab")||bar.hasAttribute?.("breakout-extend"));
+  }
+  function cancelRefresh(){if(refreshTimer)window.clearTimeout(refreshTimer);refreshTimer=0;}
+  function scheduleRefresh(initial=false){
+    if(disposed||!joined||!window.setTimeout||!eligibleInput()||initial&&(!ready||initialRecovered))return;
+    cancelRefresh();
+    refreshTimer=window.setTimeout(()=>{
+      refreshTimer=0;
+      if(disposed||!eligibleInput()||inFlight||bar.view?.selectedElement||initial&&initialRecovered)return;
+      if(initial){
+        if((diagnostic.visible||0)>0&&bar.view?.isOpen)return;
+        initialRecovered=true;
+      }
+      try{bar.view?.clearTopSitesCache?.();bar.startQuery({allowAutofill:false,resetSearchState:false});}
+      catch(e){console.warn("[Zen Refined] Smart Search refresh:",e);}
+    },initial?180:65);
+  }
+  function onActivation(e){
+    const tab=e?.target||window.gBrowser?.selectedTab;
+    if(tab&&availableTab(window,tab))windowState?.activity.set(tab,Date.now());
+    try{bar?.view?.clearTopSitesCache?.();}catch{}
+    if(bar?.view?.isOpen&&!bar.view.selectedElement)scheduleRefresh(false);
+  }
+  function onFocus(){scheduleRefresh(true);}
+  function onEscape(e){if(e.key==="Escape"){cancelRefresh();initialRecovered=true;}}
+  function onReady(){
+    ready=true;onActivation();scheduleRefresh(true);
+  }
   function install(){
     if(disposed||joined)return;
     try{
@@ -219,34 +313,80 @@
         manager[REGISTRY]=registry;
       }
       registry.byId??=new Map();registry.controllers??=new WeakMap();
-      const state={win:window,sequence:0,targets:new Map(),diagnostic};
+      const state={win:window,sequence:0,targets:new Map(),activity:new WeakMap(),diagnostic};
+      windowState=state;
       registry.windows.set(window,state);windowId=outerId(window);
       if(windowId!==null)registry.byId.set(windowId,state);
       if(parent&&(typeof parent==="object"||typeof parent==="function"))registry.controllers.set(parent,state);
       registry.count++;joined=true;
       diagnostic.stage="ready";diagnostic.error=null;
       // Only counts and flags; never log URLs, titles or typed text.
+      bar=window.gURLBar;
+      // Mutate only this native zero-prefix context, before its parent
+      // dispatch. Never change maxRichResults or the typed-query budget.
+      if(typeof child?.startQuery==="function"){
+        originalQuery=child.startQuery;
+        wrappedQuery=function(context,...args){
+          if(zeroPrefix(context,prefs.getBoolPref(PREF,true),prefs.getBoolPref("browser.urlbar.suggest.openpage",true))){
+            const entries=collect(window,SessionStore,UrlbarUtils,state.activity);
+            context.maxResults=resultBudget(entries);
+          }
+          return Reflect.apply(originalQuery,this,[context,...args]);
+        };
+        child.startQuery=wrappedQuery;
+      }
       listener={
         onQueryStarted(context){
-          if(context.isPrivate||context.searchString!=="")return;
+          inFlight=true;activeContext=context;
+          if(context.isPrivate||context.searchString!==""){clearLayout();return;}
           diagnostic.viewQueries=(diagnostic.viewQueries||0)+1;
           console.info("[Zen Refined] Smart Search native query started");
         },
+        onQueryResults(context){activeContext=context;layout(context);},
+        onQueryCancelled(){inFlight=false;},
         onQueryFinished(context){
+          inFlight=false;activeContext=context;layout(context);
           if(context.isPrivate||context.searchString!=="")return;
           const rows=context.results||[];
           diagnostic.visible=rows.filter(r=>r.providerName===NAME||r.payload?.dynamicType===TYPE).length;
           console.info("[Zen Refined] Smart Search native finished: recent="+diagnostic.visible+" total="+rows.length);
+          if(!diagnostic.visible)scheduleRefresh(true);else initialRecovered=true;
         }
       };
       try{child?.addListener?.(listener);}catch{}
-      console.info("[Zen Refined] Smart Search provider ready (preview.19, manager="+(direct===manager?"address-bar":"singleton")+")");
+      tabContainer=window.gBrowser?.tabContainer;
+      tabContainer?.addEventListener?.("TabSelect",onActivation);
+      bar?.addEventListener?.("focusin",onFocus);
+      bar?.addEventListener?.("keydown",onEscape,true);
+      if(window.MutationObserver&&bar?.nodeType){
+        openObserver=new window.MutationObserver(()=>{
+          if(!bar.view?.isOpen)clearLayout();
+          else if(activeContext)layout(activeContext);
+          scheduleRefresh(true);
+        });
+        openObserver.observe(bar,{attributes:true,attributeFilter:["open","zen-newtab","breakout-extend"]});
+      }
+      prefObserver=()=>{cancelRefresh();clearLayout();try{bar?.view?.clearTopSitesCache?.();}catch{}};
+      prefs.addObserver?.(PREF,prefObserver);
+      if(window.gBrowserInit&& !window.gBrowserInit.delayedStartupFinished){
+        readyObserver=subject=>{if(subject!==window)return;Services.obs.removeObserver(readyObserver,"browser-delayed-startup-finished");readyObserver=null;onReady();};
+        Services.obs.addObserver(readyObserver,"browser-delayed-startup-finished");
+      }else onReady();
+      console.info("[Zen Refined] Smart Search provider ready (preview.20, manager="+(direct===manager?"address-bar":"singleton")+")");
     }catch(e){diagnostic.stage="error";diagnostic.error=String(e);console.warn("[Zen Refined] Smart Search unavailable:",e);}
   }
   function dispose(){
     if(disposed)return;disposed=true;
     if(observer)try{Services.obs.removeObserver(observer,"browser-delayed-startup-finished");}catch{}
     observer=null;
+    cancelRefresh();clearLayout();resizeObserver?.disconnect();openObserver?.disconnect();
+    if(readyObserver)try{Services.obs.removeObserver(readyObserver,"browser-delayed-startup-finished");}catch{}
+    if(prefObserver)try{prefs.removeObserver?.(PREF,prefObserver);}catch{}
+    tabContainer?.removeEventListener?.("TabSelect",onActivation);
+    bar?.removeEventListener?.("focusin",onFocus);
+    bar?.removeEventListener?.("keydown",onEscape,true);
+    if(child&&wrappedQuery&&child.startQuery===wrappedQuery)child.startQuery=originalQuery;
+    try{bar?.view?.clearTopSitesCache?.();}catch{}
     try{if(listener)child?.removeListener?.(listener);}catch{}
     listener=null;
     if(joined&&registry){
