@@ -16,7 +16,9 @@
   let card=null,cardFill=null,cardName=null,cardSpeed=null,cardStatus=null,cardBytes=null,cardIcon=null,flight=null,flightAnimation=null;
   let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,flightTimer=0,latest=null;
   let updateTimer=0,hideTimer=0,readyObserver=null,layoutObserver=null,initialized=false,hydrating=false;
-  let lastDockRect=null;
+  let lastDockRect=null,followFrame=0,followUntil=0,overlayUntil=0;
+  let dock=null,dockList=null,dockEmpty=null,dockMore=null,dockBackdrop=null,dockNotice=null,dockOpen=false,limit=30;
+  const history=new Map(),rows=new Map();
   let lastRender=0,snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"}),batch=new Map(),fresh=new WeakSet();
   const number=x=>Number.isFinite(x)?Math.max(0,x):0;
   const current=()=>window.performance.now();
@@ -47,16 +49,7 @@
     return (i&&v<100?v.toFixed(1):Math.round(v))+" "+units[i]+(rate?"/s":"");
   }
   function speedText(v){return sizeText(v,true);}
-  function openDownloads(){
-    try{
-      if(prefs.getBoolPref("zen.library.enabled",false)){
-        const lib=window.ZenLibrary||ChromeUtils.importESModule("moz-src:///zen/library/ZenLibrary.mjs").ZenLibrary;
-        if(typeof lib?.toggle==="function"){lib.toggle("downloads");return;}
-      }
-    }catch{}
-    try{if(typeof window.BrowserCommands?.downloadsUI==="function"){window.BrowserCommands.downloadsUI();return;}}catch{}
-    try{window.DownloadsPanel?.showPanel(true);}catch{}
-  }
+  function openDownloads(){openDock();}
   function visible(n){
     if(!n?.isConnected||n.hidden||n.collapsed)return false;
     const r=n.getBoundingClientRect(),st=window.getComputedStyle(n);
@@ -89,29 +82,71 @@
     return value==="true"?"right":value==="false"?"left":prefs.getBoolPref(SIDE,false)?"right":"left";
   }
   function dockRect(){
-    const right=side()==="right";
-    if(node&&visible(node)&&(!observedSidebar||!node.hasAttribute("data-zr-native")||visible(observedSidebar))){
-      const r=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
-      // Only cache an on-screen native dock, never a translated hidden
-      // sidebar. A partially visible edge is not a reliable anchor.
-      if(r.left>=0&&r.right<=window.innerWidth&&r.top>=0&&r.bottom<=window.innerHeight&&i.width>0){
-        lastDockRect={left:r.left,right:r.right,top:r.top,height:r.height,x:i.left+i.width/2,y:i.top+i.height/2,side:side()};
-      }
+    const right=side()==="right",w=window.innerWidth;
+    const native=node?.hasAttribute("data-zr-native")&&observedSidebar?.isConnected;
+    // The toolbox's DOMRect includes Zen's actual animated CSS translate.
+    // Even when titlebar visibility is hidden its geometry is available.
+    // Clamp the inner edge to the viewport instead of reusing a stale
+    // expanded x coordinate. Keep native y independent of the slide.
+    if(native){
+      const t=observedSidebar.getBoundingClientRect(),n=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
+      const edge=Math.max(0,Math.min(w,right?t.left:t.right));
+      const y=n.height>0?n.top:(lastDockRect?.top??70),height=n.height||33;
+      const iconY=i.height>0?i.top+i.height/2:y+height/2;
+      const iconX=i.width>0?i.left+i.width/2:edge;
+      const x=Math.max(8,Math.min(w-8,iconX));
+      lastDockRect={edge,top:y,height,x,y:iconY,side:side()};
+      return lastDockRect;
+    }
+    if(node&&visible(node)){
+      const n=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
+      lastDockRect={edge:right?n.left:n.right,top:n.top,height:n.height,x:i.left+i.width/2,y:i.top+i.height/2,side:side()};
+      return lastDockRect;
     }
     if(lastDockRect?.side===side())return lastDockRect;
-    const width=58,top=70,left=right?window.innerWidth-width-18:18;
-    return {left,right:left+width,top,height:33,x:left+width/2,y:top+16.5,side:side()};
+    const edge=right?w:0,top=70;
+    return {edge,top,height:33,x:right?w-8:8,y:top+16.5,side:side()};
   }
-  function positionCard(){
-    if(!card||!node||!cardOpen)return;
-    const r=dockRect(),right=r.side==="right";
-    const w=Math.min(264,Math.max(140,window.innerWidth-28)),h=card.offsetHeight||82,gap=14;
-    let x=right?r.left-w-gap:r.right+gap;
-    x=Math.max(14,Math.min(window.innerWidth-w-14,x));
-    const y=Math.max(14,Math.min(window.innerHeight-h-14,r.top+(r.height-h)/2));
-    card.style.setProperty("--zr-card-x",x+"px");card.style.setProperty("--zr-card-y",y+"px");
-    card.style.setProperty("--zr-card-width",w+"px");
-    card.setAttribute("data-side",right?"right":"left");
+  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(Math.max(lo,hi),v));
+  function setVar(n,k,v){if(n.style.getPropertyValue(k)!==v)n.style.setProperty(k,v);}
+  function positionOverlay(n,r,width,height){
+    const right=r.side==="right",w=window.innerWidth,h=window.innerHeight;
+    const x=clamp(right?r.edge-width-8:r.edge+8,6,w-width-6);
+    const y=clamp(r.top+(r.height-height)/2,8,h-height-8);
+    // Separate positioning translate from entrance transform. No extra
+    // CSS transition on the position: both surfaces follow native motion.
+    setVar(n,"--zr-overlay-x",x+"px");setVar(n,"--zr-overlay-y",y+"px");
+    setVar(n,"--zr-overlay-width",width+"px");
+    n.setAttribute("data-side",r.side);
+  }
+  function positionOverlays(){
+    if(!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
+    const r=dockRect();
+    if(cardOpen||current()<overlayUntil)positionOverlay(card,r,Math.min(264,Math.max(1,window.innerWidth-12)),card.offsetHeight||82);
+    if(dockOpen||current()<overlayUntil){
+      const width=Math.min(344,Math.max(1,window.innerWidth-12));
+      positionOverlay(dock,r,width,dock.offsetHeight||Math.min(460,window.innerHeight-16));
+      // Outside click catcher covers the content side only, so it never
+      // blocks native sidebar hover or prevents the user moving the dock.
+      const right=r.side==="right";
+      setVar(dockBackdrop,"--zr-outside-left",(right?0:Math.max(0,r.edge))+"px");
+      setVar(dockBackdrop,"--zr-outside-right",(right?Math.max(0,window.innerWidth-r.edge):0)+"px");
+    }
+  }
+  function stopFollow(){
+    if(followFrame)window.cancelAnimationFrame(followFrame);followFrame=0;followUntil=0;
+  }
+  function follow(ms=380){
+    if(dead||!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
+    followUntil=Math.max(followUntil,current()+ms);
+    if(followFrame)return;
+    const tick=()=>{
+      followFrame=0;
+      if(dead||!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
+      positionOverlays();
+      if(current()<followUntil)followFrame=window.requestAnimationFrame(tick);
+    };
+    followFrame=window.requestAnimationFrame(tick);
   }
   function mount(){
     if(!node||dead)return;
@@ -138,12 +173,12 @@
     node.toggleAttribute("data-fallback",!slot&&!native);
     root.toggleAttribute("data-zr-downloads-native",native);
     if(changed||(oldSide&&oldSide!==side()))lastDockRect=null;
-    if(resizeObserver&&toolbox!==observedSidebar){
-      resizeObserver.disconnect();observedSidebar=toolbox;if(toolbox)resizeObserver.observe(toolbox);
+    if(toolbox!==observedSidebar){
+      resizeObserver?.disconnect();observedSidebar=toolbox;if(toolbox)resizeObserver?.observe(toolbox);
     }
     // Cache the last visible location on structural/visibility changes.
-    dockRect();
-    if(cardOpen&&(changed||(oldSide&&oldSide!==side())||visible(node)))positionCard();
+    if(cardOpen||dockOpen||current()<overlayUntil){positionOverlays();follow();}
+    else dockRect();
     if(flight&&(changed||(oldSide&&oldSide!==side()))){cancelFlight();openCard();}
   }
   function scheduleMount(){
@@ -160,7 +195,9 @@
   }
   function trackLayout(event){
     const n=event.target;
-    if(n===observedSidebar||n===anchor||n===get("zen-appcontent-navbar-wrapper")||n===get("zen-main-app-wrapper"))scheduleMount();
+    if(n===observedSidebar||n===anchor||n===get("zen-appcontent-navbar-wrapper")||n===get("zen-main-app-wrapper")){
+      if(event.type==="transitionrun"||event.type==="transitionstart")follow(420);else scheduleMount();
+    }
   }
   function makeTrack(){
     const track=make("span","zr-download-track"),f=make("span","zr-download-fill");track.append(f);return [track,f];
@@ -171,46 +208,131 @@
     speed=make("span","zr-download-speed");
     icon=make("span","zr-download-icon");icon.setAttribute("aria-hidden","true");
     const [track,f]=makeTrack();fill=f;node.append(speed,icon,track);
-    node.addEventListener("click",()=>{cancelFlight();if(cardOpen)closeCard();else openCard();});
+    node.addEventListener("click",()=>{cancelFlight();if(dockOpen)closeDock();else if(cardOpen)closeCard();else openCard();});
     card=make("button","zr-download-card");card.id="zr-download-card";card.type="button";
-    card.setAttribute("aria-label","Open native downloads");card.setAttribute("aria-hidden","true");card.setAttribute("data-state","idle");card.tabIndex=-1;
+    card.setAttribute("aria-label","Open downloads dock");card.setAttribute("aria-hidden","true");card.setAttribute("data-state","idle");card.tabIndex=-1;
     const body=make("span","zr-download-body"),line=make("span","zr-download-line"),bottom=make("span","zr-download-line");
     cardName=make("span","zr-download-name");cardSpeed=make("span","zr-download-speed");cardStatus=make("span","zr-download-status");cardBytes=make("span","zr-download-bytes");
     line.append(cardName,cardSpeed);bottom.append(cardBytes,cardStatus);
     const [ct,cf]=makeTrack();cardFill=cf;body.append(line,ct,bottom);
     cardIcon=make("span","zr-download-icon");cardIcon.setAttribute("aria-hidden","true");card.append(cardIcon,body);
     card.addEventListener("click",()=>{closeCard();openDownloads();});root.append(card);
+    buildDock();
     resizeObserver=typeof ResizeObserver==="function"?new ResizeObserver(scheduleMount):null;
     mount();
     layoutObserver=new MutationObserver(records=>{
       if(records.some(r=>{
-        if(r.target===node||r.target===card||node.contains(r.target)||card.contains(r.target))return false;
+        if(r.target===node||r.target===card||r.target===dock||r.target===dockBackdrop||node.contains(r.target)||card.contains(r.target)||dock?.contains(r.target))return false;
         const selector="#navigator-toolbox,#zen-sidebar-top-buttons,#zen-tabs-wrapper,#tabbrowser-tabs,#oneplane-download-indicator-slot";
         const relevant=n=>n?.nodeType===1&&(n.matches?.(selector)||n.querySelector?.(selector));
         if(r.type==="attributes")return r.target===root||r.target===observedSidebar||r.target===anchor||r.target.matches?.(selector);
         return [...r.addedNodes,...r.removedNodes].some(n=>n!==node&&n!==card&&relevant(n));
       }))scheduleMount();
     });
-    layoutObserver.observe(root,{attributes:true,attributeFilter:["oneplane-active","customizing","zen-right-side","zen-compact-mode","zen-sidebar-expanded","zen-has-hover","hidden","collapsed"],childList:true});
+    layoutObserver.observe(root,{attributes:true,attributeFilter:["oneplane-active","customizing","zen-right-side","zen-compact-mode","zen-compact-animating","zen-sidebar-expanded","zen-has-hover","hidden","collapsed"],childList:true});
     const toolbox=get("navigator-toolbox");
-    if(toolbox)layoutObserver.observe(toolbox,{subtree:true,childList:true,attributes:true,attributeFilter:["hidden","collapsed","zen-has-hover","zen-compact-mode-active","zen-sidebar-expanded"]});
+    if(toolbox)layoutObserver.observe(toolbox,{subtree:true,childList:true,attributes:true,attributeFilter:["hidden","collapsed","zen-has-hover","zen-user-show","zen-has-empty-tab","flash-popup","has-popup-menu","movingtab","zen-compact-mode-active","zen-sidebar-expanded","animate"]});
     window.addEventListener("resize",scheduleMount);window.addEventListener("OnePlane:DownloadHostChanged",scheduleMount);
     window.addEventListener("ZenCompactMode:LayoutUpdate",scheduleMount);window.addEventListener("ZenCompactMode:Toggled",scheduleMount);
-    window.addEventListener("transitionend",trackLayout,true);window.addEventListener("pointerdown",trackClick,true);
+    for(const type of ["transitionrun","transitionstart","transitionend","transitioncancel"])window.addEventListener(type,trackLayout,true);
+    window.addEventListener("pointerdown",trackClick,true);window.addEventListener("pointerdown",outsideDock,true);
     window.addEventListener("keydown",onKey,true);prefs.addObserver(SIDE,scheduleMount);
   }
+  function action(label,cls,handler){
+    const b=make("button",cls);b.type="button";b.textContent=label;b.addEventListener("click",handler);return b;
+  }
+  function buildDock(){
+    dockBackdrop=make("div","zr-download-outside");dockBackdrop.id="zr-download-outside";
+    dockBackdrop.addEventListener("pointerdown",e=>{e.preventDefault();closeDock();});
+    dock=make("section","zr-download-dock");dock.id="zr-download-dock";
+    dock.setAttribute("role","dialog");dock.setAttribute("aria-label","Downloads");dock.setAttribute("aria-hidden","true");dock.inert=true;
+    const header=make("div","zr-dock-header"),title=make("span","zr-dock-title");
+    title.textContent="Downloads";
+    const close=action("×","zr-dock-close",()=>closeDock(true));close.setAttribute("aria-label","Close downloads");
+    header.append(title,close);
+    dockList=make("div","zr-dock-list");dockList.setAttribute("role","list");
+    dockEmpty=make("div","zr-dock-empty");dockEmpty.textContent="No downloads yet";
+    dockNotice=make("div","zr-dock-notice");dockNotice.setAttribute("role","status");
+    dockMore=action("Show more","zr-dock-more",()=>{limit+=30;renderDock();positionOverlays();});
+    dock.append(header,dockList,dockEmpty,dockMore,dockNotice);root.append(dockBackdrop,dock);
+  }
+  function outsideDock(e){
+    if(!dockOpen)return;
+    const path=e.composedPath?.()||[];
+    if(path.includes(dock)||path.includes(node)||dock.contains(e.target)||node.contains(e.target))return;
+    closeDock();
+  }
+  function closeDock(restoreFocus=false){
+    if(!dock)return;
+    if(dockOpen){overlayUntil=current()+520;follow(520);}
+    dockOpen=false;dock.removeAttribute("data-open");dockBackdrop?.removeAttribute("data-open");
+    dock.inert=true;dock.setAttribute("aria-hidden","true");
+    node?.setAttribute("aria-expanded",String(cardOpen));updateLive();
+    if(restoreFocus&&visible(node))node.focus?.({preventScroll:true});
+  }
+  function openDock(){
+    if(!dock||dead)return;
+    cancelFlight();closeCard();dockOpen=true;limit=30;dockNotice.textContent="";updateLive();
+    renderDock();positionOverlays();
+    dock.inert=false;dock.setAttribute("aria-hidden","false");
+    dock.setAttribute("data-open","true");dockBackdrop.setAttribute("data-open","true");
+    node.setAttribute("aria-expanded","true");follow();
+    dock.querySelector(".zr-dock-close")?.focus({preventScroll:true});
+  }
+  function makeRow(download){
+    const el=make("div","zr-dock-row");el.setAttribute("role","listitem");
+    const glyph=make("span","zr-download-icon"),body=make("div","zr-dock-row-body"),name=make("div","zr-dock-name"),meta=make("div","zr-dock-meta");
+    glyph.setAttribute("aria-hidden","true");
+    const [track,fill]=makeTrack();
+    const folder=action("Show in folder","zr-dock-folder",async()=>{
+      // Gecko owns path resolution and platform file-manager integration.
+      // No shell command, arbitrary path, or executable launch.
+      try{
+        if(!download.succeeded||typeof download.showContainingDirectory!=="function")return;
+        await download.showContainingDirectory();
+      }catch{if(dockNotice&&dockOpen)dockNotice.textContent="Could not open the containing folder.";}
+    });
+    body.append(name,meta,track);el.append(glyph,body,folder);
+    return {el,name,meta,track,fill,folder};
+  }
+  function renderDock(){
+    if(!dockOpen||!dockList)return;
+    // Keep all native session-list entries in memory; render only a
+    // bounded page, active items first, then newest first. Reuse rows.
+    const entries=[...history.entries()].reverse();
+    entries.sort((a,b)=>Number(b[1].active)-Number(a[1].active));
+    const wanted=entries.slice(0,limit),keep=new Set(wanted.map(([d])=>d));
+    for(const [d,row] of rows)if(!keep.has(d)){row.el.remove();rows.delete(d);}
+    let index=0;
+    for(const [d,v] of wanted){
+      let row=rows.get(d);
+      if(!row){row=makeRow(d);rows.set(d,row);}
+      const text=v.active?sizeText(v.bytes)+(v.known?" / "+sizeText(v.total):"")+" · "+speedText(v.speed):
+        v.success?"Complete · "+sizeText(v.total||v.bytes):v.failed?"Failed":"Stopped";
+      if(row.name.textContent!==v.name)row.name.textContent=v.name;
+      if(row.meta.textContent!==text)row.meta.textContent=text;
+      row.el.setAttribute("data-state",v.active?"active":v.success?"complete":v.failed?"failed":"stopped");
+      row.el.toggleAttribute("data-indeterminate",v.active&&!v.known);
+      setVar(row.fill,"--zr-download-progress",String(v.known?Math.min(1,v.bytes/v.total):0));
+      row.folder.disabled=!v.success||typeof d.showContainingDirectory!=="function";
+      if(dockList.children[index]!==row.el)dockList.insertBefore(row.el,dockList.children[index]||null);
+      index++;
+    }
+    dockEmpty.hidden=entries.length>0;dockMore.hidden=entries.length<=limit;
+  }
   function cancelHide(){if(hideTimer)window.clearTimeout(hideTimer);hideTimer=0;}
-  function onKey(e){if(e.key==="Escape"&&cardOpen)closeCard();}
+  function onKey(e){if(e.key==="Escape"){if(dockOpen)closeDock(true);else if(cardOpen)closeCard();}}
   function closeCard(){
-    cancelHide();cardOpen=false;card?.removeAttribute("data-open");
+    cancelHide();if(cardOpen){overlayUntil=current()+520;follow(520);}cardOpen=false;card?.removeAttribute("data-open");
     card?.setAttribute("aria-hidden","true");if(card)card.tabIndex=-1;
-    node?.setAttribute("aria-expanded","false");
+    node?.setAttribute("aria-expanded",String(dockOpen));
     updateLive();
   }
-  function updateLive(){node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||!!flight);}
+  function updateLive(){node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||dockOpen||!!flight);}
   function openCard(){
     if(!card||!node||dead)return;
-    cancelHide();cardOpen=true;updateLive();positionCard();
+    if(dockOpen)return;
+    cancelHide();cardOpen=true;updateLive();positionOverlays();follow();
     card.setAttribute("data-open","true");card.setAttribute("aria-hidden","false");card.tabIndex=0;
     node.setAttribute("aria-expanded","true");
     hideTimer=window.setTimeout(closeCard,HOLD);
@@ -223,7 +345,7 @@
   }
   function launchFlight(){
     if(dead||!node)return;
-    cancelFlight();closeCard();mount();
+    cancelFlight();if(dockOpen)return;closeCard();mount();
     const activeWindow=!document.hasFocus||document.hasFocus();
     if(!activeWindow)return;
     node.setAttribute("data-live","true");
@@ -275,6 +397,7 @@
       [cardName,s.active>1?s.active+" downloads":details?.name||"Downloads"],
       [cardBytes,details?(sizeText(bytes)+(known&&total>0?" / "+sizeText(total):"")):"No active downloads"]];
     for(const [n,v] of values)if(n.textContent!==v)n.textContent=v;
+    if(dockOpen)renderDock();
     // No geometry reads on ordinary transfer updates.
   }
   function schedule(immediate=false){
@@ -285,6 +408,7 @@
   function changed(d){
     if(dead||!node)return;
     const previous=batch.get(d),next=sample(d);
+    history.set(d,next);
     if(next.active){
       if(!previous?.active){
         // A new batch after completion starts with clean totals.
@@ -299,13 +423,13 @@
     else if(!hydrating&&!previous&&(next.success||next.failed)&&fresh.has(d)){
       if(![...batch.values()].some(x=>x.active))batch.clear();
       batch.set(d,next);latest=d;schedule(true);launchFlight();
-    }
+    }else if(dockOpen)schedule();
   }
   function added(d){if(!hydrating)fresh.add(d);changed(d);}
-  function removed(d){if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}}
+  function removed(d){history.delete(d);if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen)schedule();}
   function teardown(){
     ++epoch;
-    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();closeCard();
+    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();closeCard();closeDock();stopFollow();overlayUntil=0;
     if(layoutFrame)window.cancelAnimationFrame(layoutFrame);layoutFrame=0;
     resizeObserver?.disconnect();resizeObserver=null;observedSidebar=anchor=null;
     if(list&&view)try{list.removeView(view);}catch{}
@@ -313,9 +437,11 @@
     layoutObserver?.disconnect();layoutObserver=null;
     window.removeEventListener("resize",scheduleMount);window.removeEventListener("OnePlane:DownloadHostChanged",scheduleMount);
     window.removeEventListener("ZenCompactMode:LayoutUpdate",scheduleMount);window.removeEventListener("ZenCompactMode:Toggled",scheduleMount);
-    window.removeEventListener("transitionend",trackLayout,true);window.removeEventListener("pointerdown",trackClick,true);window.removeEventListener("keydown",onKey,true);
+    for(const type of ["transitionrun","transitionstart","transitionend","transitioncancel"])window.removeEventListener(type,trackLayout,true);
+    window.removeEventListener("pointerdown",trackClick,true);window.removeEventListener("pointerdown",outsideDock,true);window.removeEventListener("keydown",onKey,true);
     try{prefs.removeObserver(SIDE,scheduleMount);}catch{}
     node?.remove();card?.remove();node=fill=speed=icon=card=cardFill=cardName=cardSpeed=cardStatus=cardBytes=cardIcon=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
+    dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();limit=30;
     snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"});
     root.removeAttribute(ACTIVE);root.removeAttribute("data-zr-downloads-native");lastDockRect=null;
   }

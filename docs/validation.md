@@ -115,3 +115,9 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Native sidebar on either side: icon above top controls, not footer. Hide/show or scroll sidebar: same node/parent, no jump to top-edge fallback. Verify last visible notification anchor.
 - [ ] Fresh idle, completed, canceled: no dock speed/progress strip; normal download glyph. Empty card has no progress strip. Native footer Library is hidden only with active native dock, still available from details card; disable/customize restores it.
 - [ ] OnePlane fallback and host remain unchanged; page progress, startup and bookmarks unchanged.
+
+## 0.6.0-preview.5 — live sidebar anchoring and Downloads Dock
+
+- [ ] Native compact right/left: card follows actual translated toolbox edge during reveal/hide; no stale floating position, soft entrance/exit. No continuous idle frame loop. Verify click target and clipping in real Zen.
+- [ ] Card opens custom Downloads Dock, not Library. Native list hydration, active-first ordering, 30-item paging, live row updates, Show in folder using native method, empty/error state, close/Escape/outside click. No private/public mixing or file launching/deletion. Native Library other sections unchanged.
+- [ ] Toggle module, OnePlane host, resize, unload during open/closing; remove all DOM/listeners/timers/frames. Page Progress and shared bookmarks unchanged.

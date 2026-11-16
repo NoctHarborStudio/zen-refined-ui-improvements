@@ -27,9 +27,9 @@ Optional one-shot browser-chrome startup reveal, enabled by default (1050 ms; th
 
 ## Download indicator and Page Progress
 
-The download icon sits at the top of Zen's native sidebar, follows the resolved sidebar side and stays mounted during auto-hide. The idle/completed dock never displays a progress strip; the redundant footer Library button is hidden while the native indicator is installed. Library remains available through the details card. Speed is above the icon and progress below it. A short curved flight lands at the icon, opens a theme-colored card with filename, real transferred bytes, speed and progress for three seconds, then retracts. The icon reopens details; the card opens native Library/Downloads. A hidden native sidebar retains its icon in place; flight/card notifications use the last visible dock position. OnePlane retains its temporary left fallback and optional host contract for its future Extension Dock; no native Library redesign or OnePlane edits.
+The download icon sits at the top of Zen's native sidebar. A short flight lands at the icon and opens a three-second detail card with real download progress. The card follows the moving inner edge of the sidebar, including the collapsed window edge, without moving the icon itself. Clicking the card opens the new Downloads Dock, an independent themed list with file names, transfer status, progress, Show in folder, close button and outside-click dismissal. Native Library is not opened by the card. Existing native download data and file-manager integration remain unchanged; native Library's other sections are not redesigned. OnePlane's optional host contract remains available.
 
-Page Progress is a thin neutral gray line expanding symmetrically from the top center, with smooth CSS interpolation, a soft unknown-progress pulse and no percentages. Both modules use native events, bounded timers, independent settings and unload cleanup. See [indicator architecture](docs/indicators.md).
+Page Progress expands symmetrically from the top center without percentages. Both modules use native events; the dock only samples moving sidebar geometry in a bounded animation window while visible, and transfer progress remains coalesced. See [indicator architecture](docs/indicators.md).
 
 ## Planned improvements / known issues
 
