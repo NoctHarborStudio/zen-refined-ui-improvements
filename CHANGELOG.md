@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0-preview.14
+
+- Add optional Center Disassembly for explicit browser close-window commands: bookmarks retreat, OnePlane tabs converge, native controls fade and the address shell contracts over 520ms. Restore chrome before invoking the original native close command; never intercept OS shutdown, global quit or tab close.
+- Download Indicator, Downloads Dock and Page Progress accepted in user testing; no runtime changes to those modules.
+
 ## 0.6.0-preview.13
 
 - Separate downloads persistence from native sidebar ownership. Clicking an automatic notification, file row or All downloads keeps the downloads surface open without opening Compact Mode; only the sidebar indicator can acquire its hold.

@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.5.0-preview.2`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.14`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -11,11 +11,15 @@ Baseline: `0.5.0-preview.2`. Zen Refined owns general browser UI improvements. O
 | Startup placeholder suppression | Implemented; optional Gecko preferences with restoration. |
 | Center Assembly | Implemented and visually accepted. Includes floating search, tabs, bookmarks, navigation, extension and window controls. Performance issue tracked separately. |
 
-## In development — 0.6.0-preview.6
+## Accepted in user testing — 0.6.0-preview.13
 
-- Download Indicator: native sidebar icon + three-second detail card, mirrored placement and left-side OnePlane fallback, optional future Extension Dock host. Native Downloads data, live sidebar tracking and custom Downloads Dock with native Show in folder, time/size sorting, confirmed Clear and fluid notification. Other Library sections deferred.
-- Page Progress: top center-out gray line, no percentage. Validate actual Zen loading and tab switching before accepting.
-- Integration pipeline: Zen Refined owns data/rendering; OnePlane will own the final Extension Dock placement. No new OnePlane dependency or duplicate listener.
+- Download Indicator & Downloads Dock: accepted, including fluid wave, shared recent/full surface, source-aware native sidebar hold, sorting and transfer statistics.
+- Page Progress: accepted; top center-out gray line without percentage.
+
+## In development — 0.6.0-preview.14
+
+- Center Disassembly: simple reverse startup assembly, 520ms, optional, enabled by default. Native close command remains authoritative. Real Zen runtime validation pending.
+- Optional OnePlane Extension Dock integration remains future work.
 
 ## Backlog
 
@@ -24,12 +28,6 @@ Baseline: `0.5.0-preview.2`. Zen Refined owns general browser UI improvements. O
 - Intermittent stutter and low apparent FPS, most noticeable while horizontal tabs fan out during startup.
 - Keep the approved visual design, timing and sequence. Profile a real Zen cold start before selecting an optimization; separate Gecko style/layout/paint/compositing from startup initialization and OnePlane work. The exact bottleneck is not established.
 - Do not change the accepted animation until this work is explicitly resumed.
-
-### Center Disassembly — optional, low priority / deferred
-
-- Explore a reverse Center Assembly for browser-window close: horizontal tabs converge or contract, buttons and bookmarks retreat, then the window disappears. Use the existing page as the visual background until the actual close.
-- No implementation approved. Evaluate whether the polish is worth adding an exit delay at all. If revisited, consider an opt-in setting, reduced motion, independent Zen/OnePlane operation, and preserving native close confirmation, downloads and session behavior. Never prevent or delay emergency/OS shutdown.
-- This is a window-close animation idea, not a tab-close or page-navigation effect.
 
 ### General UI improvements — original backlog
 

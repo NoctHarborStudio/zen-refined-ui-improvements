@@ -131,6 +131,12 @@
   },
   {
     "type": "checkbox",
+    "property": "zen.refined.closing.animation",
+    "label": "Center Disassembly closing animation",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
     "property": "zen.refined.downloads.indicator",
     "label": "Download indicator (speed and progress)",
     "defaultValue": true

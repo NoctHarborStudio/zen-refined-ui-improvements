@@ -4,7 +4,7 @@
   "description": "Modular UI improvements for Zen: Magnetic Bookmarks, Center Assembly, download and page loading indicators.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.6.0-preview.13",
+  "version": "0.6.0-preview.14",
   "style": {
     "chrome": "chrome.css"
   },
@@ -16,7 +16,7 @@
     "animation"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-16T16:34:01.000Z",
+  "updatedAt": "2026-11-16T16:42:04.000Z",
   "fork": [
     "zen"
   ],
@@ -42,6 +42,11 @@
       ]
     },
     "page-progress.uc.mjs": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ]
+    },
+    "closing-animation.uc.mjs": {
       "include": [
         "chrome://browser/content/browser.xhtml"
       ]

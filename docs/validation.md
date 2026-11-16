@@ -127,3 +127,9 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Card grows from small rounded edge seed into full card over 780ms, then contents fade in; reverses without text scaling. 780ms flight, existing 3s hold, edge tracking and reduced motion retained.
 - [ ] Theme matches actual Zen sidebar in light/dark, custom gradients and Compact Mode. Confirm sampled theme tokens from toolbox, not generic arrowpanel gray.
 - [ ] Time/size ascending/descending, unknown size last, active first; order cache invalidated only when relevant values change. Clear replaces header with Yes left/No right; No/Escape restore, Yes removes finished eligible list entries only, keeps active/partial/blocked and disk files. Confirm native list persistence, private/public isolation and cleanup on unload during clear.
+
+## 0.6.0-preview.14 — Center Disassembly
+
+- [ ] Click the native window close button in standalone Zen and with OnePlane. Visible chrome retreats while page stays in place; one original close command runs after 520ms.
+- [ ] Native multiple-tab warning and beforeunload cancellation: confirm the browser remains fully usable and all temporary effects are removed. Accept native close normally. No changes to session restore or warning preferences.
+- [ ] Ctrl+Shift+W, second close click, global quit, OS shutdown, reduced motion, disable during animation, multiple windows, startup overlap and Sine unload. No stuck styles or delayed shutdown.
