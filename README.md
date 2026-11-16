@@ -27,8 +27,11 @@ Optional one-shot browser-chrome startup reveal, enabled by default (1050 ms; th
 
 ## Planned improvements / known issues
 
-- **Early startup:** Sine cannot intercept the native window before its scripts load. The center assembly is a browser-chrome reveal, not an OS window animation; late script loading or a slow initialization may fall back to normal startup.
-- **Bookmark text rendering:** animated transforms on text-bearing native nodes can cause blur or glyph shimmer in Gecko/WebRender. Preview.6 removed those transforms; preview.7 restores content enlargement using native font/icon sizes. Actual Windows rendering and performance remain to be validated.
+- **Center Assembly performance:** the accepted startup reveal still has intermittent visible frame drops/stutter, especially when the horizontal tabs fan out. Visual design is accepted; optimization is deferred. See [known issues](docs/known-issues.md).
+- **Center Disassembly (optional idea):** a reverse assembly when closing a browser window. Tabs contract toward the center, surrounding controls and bookmarks retreat, then the window closes. Low-priority exploratory work; not approved for implementation yet. See [roadmap](docs/roadmap.md).
+- **General UI improvements:** review page framing, spacing, corners and unnecessary outlines; prefer existing Zen settings over duplicating functionality.
+
+See the [roadmap](docs/roadmap.md) for feature status and the [known issues](docs/known-issues.md) for confirmed observations and compatibility risks. Adaptive Page Transitions remains retired.
 
 ## Install the preview in Sine
 

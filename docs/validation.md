@@ -83,3 +83,9 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Confirm temporary sheet uses Gecko USER_SHEET (same cascade origin as Sine), and author/user-important theme declarations cannot prevent the reveal. Verify temporary sheet removal and original attributes/styles after animation or cancellation.
 
 - [ ] Native CSS transitions are temporarily disabled only for an animated element, so they do not chase the animated progress value. Native transitions are restored at effect completion.
+
+## Deferred follow-up — user testing of 0.5.0-preview.2
+
+- Visual Center Assembly design accepted; intermittent frame drops during tab fan-out remain a [known issue](known-issues.md). Optimization is deferred, not completed.
+- When resumed, capture a real cold-start performance profile and validate frame pacing without altering the accepted visual sequence.
+- Reverse window-close assembly is an optional deferred [roadmap idea](roadmap.md), not an implemented feature or a current validation requirement.
