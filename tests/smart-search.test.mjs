@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 const source=readFileSync(new URL("../smart-search.uc.mjs",import.meta.url),"utf8");
-const start=source.indexOf("function queryAllowed("),end=source.indexOf("let manager=null",start);
+const start=source.indexOf("function outerId("),end=source.indexOf("let manager=null",start);
 const api=new Function("prefs","PREF","LIMIT","NAME","TYPE",source.slice(start,end)+"return {queryAllowed,selectRecent,availableTab,eligibleUrl,collect,validTarget,remember,makeProvider};")({getBoolPref:()=>true,getIntPref:()=>4},"enable","limit","provider","zr-recent-tab");
 const context={searchString:"",isPrivate:false,sources:[4]};
 test("only unrestricted empty normal-window tab queries",()=>{
@@ -80,4 +80,29 @@ test("actual script registers with Gecko 160 SessionStore path and survives miss
   assert.equal(names.includes("resource:///modules/sessionstore/SessionStore.sys.mjs"),!hasStore);
   w.__zenRefinedSmartSearch();assert.equal(providers.size,0);
  }
+});
+
+test("workspace collection can be incomplete; native tabs are still included",()=>{
+ const f=fixture();f.win.gZenWorkspaces.allStoredTabs=[];
+ assert.equal(api.collect(f.win,f.session,f.utils).length,2);
+});
+test("native view listener reports final result counts and detaches on unload",()=>{
+ const w={gBrowser:{},addUnloadListener(){},addEventListener(){},removeEventListener(){}};
+ const providers=new Map(),logs=[];let listener;
+ const actual={registerProvider:p=>providers.set(p.name,p),getProvider:n=>providers.get(n),unregisterProvider:p=>providers.delete(p.name)};
+ w.gURLBar={controller:{addListener(l){listener=l;},removeListener(l){if(listener===l)listener=null;}},parentController:{manager:actual}};
+ const modules={
+  "moz-src:///browser/components/urlbar/UrlbarProvidersManager.sys.mjs":{ProvidersManager:{getInstanceForSap(){throw Error("wrong manager")}}},
+  "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs":{UrlbarProvider:class{},UrlbarUtils:{}},
+  "chrome://browser/content/urlbar/UrlbarShared.mjs":{UrlbarShared:{PROVIDER_TYPE:{PROFILE:1}}},
+  "chrome://browser/content/urlbar/UrlbarResult.mjs":{UrlbarResult:class{}},
+  "resource://gre/modules/PrivateBrowsingUtils.sys.mjs":{PrivateBrowsingUtils:{isWindowPrivate:()=>false}},
+  "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs":{SessionStore:{}}
+ };
+ new Function("window","document","Services","ChromeUtils","console",source)(w,{documentElement:{hasAttribute:()=>false}},{prefs:{},obs:{}},{importESModule:p=>modules[p]},{info:m=>logs.push(m),warn:m=>logs.push(m)});
+ assert.equal(w.__zenRefinedSmartSearchStatus().registered,true);
+ listener.onQueryFinished({searchString:"",results:[{providerName:"ZenRefinedRecentTabs"},{providerName:"native"}]});
+ assert.equal(w.__zenRefinedSmartSearchStatus().visible,1);
+ assert.equal(logs.at(-1),"[Zen Refined] Smart Search native finished: recent=1 total=2");
+ w.__zenRefinedSmartSearch();assert.equal(listener,null);assert.equal(providers.size,0);
 });

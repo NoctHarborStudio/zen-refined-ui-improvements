@@ -17,3 +17,7 @@ First implementation: 0.6.0-preview.17. Native URL-bar provider only, not a repl
 ## Preview.18 registration correction
 
 Use the native Library's moz-src SessionStore path; the former resource alias is a fallback only. Missing lazy metadata skips unloaded entries rather than blocking registration. Runtime diagnostic in Browser Console: `window.__zenRefinedSmartSearchStatus?.()` (registration state, query eligibility and counts; no URLs or titles). A successful registration logs `[Zen Refined] Smart Search provider ready`. The actual browser still needs testing.
+
+## Preview.19
+
+Automatic Browser Console messages identify the provider manager, native query start, eligibility, candidate count, emission and final native result count. No typed text, URLs or titles are logged. Actual address-bar manager and controller identity are preferred, and both native tab and workspace collections are consulted. No global most-recent-window fallback.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.19
+
+- Attach Smart Search to the actual address-bar provider manager, resolve owning windows by native identity or controller, and combine workspace and native tab collections. Automatically log count-only query eligibility, emitted rows and final native result counts; no console commands needed. Runtime display verification pending.
+
 ## 0.6.0-preview.18
 
 - Correct the SessionStore import to the Gecko 160 path used by Zen 1.24.2b; missing optional lazy metadata no longer prevents Smart Search registration. Register immediately in an already initialized browser window and expose count-only runtime diagnostics. Real Zen verification pending.
