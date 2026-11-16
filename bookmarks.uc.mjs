@@ -235,7 +235,30 @@ function install() {
   // inside it. Only these two children change their native dimensions.
   const contentProperties=["left","top","width","height","paddingTop","paddingRight","paddingBottom","paddingLeft","fontSize","lineHeight"];
   const contentVar=k=>"--zr-bm-content-"+k.replace(/[A-Z]/g,c=>"-"+c.toLowerCase());
+  // Registered length variables interpolate even when the actual geometry
+  // must be !important to win against the native theme. Registration is
+  // per document; an existing registration survives Sine hot reload.
+  let registeredContent=true;
+  for(const k of contentProperties){
+    try{window.CSS.registerProperty({name:contentVar(k),syntax:"<length>",inherits:false,initialValue:"0px"});}
+    catch(e){if(e.name!=="InvalidModificationError")registeredContent=false;}
+  }
+  const textCanvas=document.createElementNS("http://www.w3.org/1999/xhtml","canvas");
+  const textContext=textCanvas.getContext("2d");
+  const contentOriginals=new WeakMap();
   function numeric(v,fallback=0){const n=parseFloat(v);return Number.isFinite(n)?n:fallback;}
+  function measureLabel(ch,st,g,node){
+    const label=ch.getAttribute("value")??ch.textContent?.trim()??"";
+    const title=label||node.getAttribute("label")||"";
+    if(!title||!textContext)return null;
+    try{
+      textContext.font=st.font&&st.font!==""?st.font:[st.fontStyle||"normal",st.fontWeight||"400",g.fontSize+"px",st.fontFamily||"sans-serif"].join(" ");
+      if("letterSpacing" in textContext)textContext.letterSpacing=st.letterSpacing==="normal"?"0px":st.letterSpacing;
+      const textWidth=textContext.measureText(title).width;
+      const extras=g.paddingLeft+g.paddingRight+numeric(st.borderLeftWidth)+numeric(st.borderRightWidth);
+      return {textWidth,extras,complete:textWidth+extras<=g.width+2};
+    }catch{return null;}
+  }
   function readContent(node,r){
     const result=new Map(),borderX=node.clientLeft||0,borderY=node.clientTop||0;
     for(const ch of node.querySelectorAll(":scope > .toolbarbutton-icon, :scope > .toolbarbutton-text")){
@@ -244,7 +267,14 @@ function install() {
       const text=ch.classList.contains("toolbarbutton-text");
       const g={left:b.left-r.left-borderX,top:b.top-r.top-borderY,width:b.width,height:b.height,
         paddingTop:numeric(st.paddingTop),paddingRight:numeric(st.paddingRight),paddingBottom:numeric(st.paddingBottom),paddingLeft:numeric(st.paddingLeft)};
-      if(text){g.fontSize=numeric(st.fontSize,12);if(st.lineHeight!=="normal"&&Number.isFinite(parseFloat(st.lineHeight)))g.lineHeight=parseFloat(st.lineHeight);}
+      if(text){
+        g.fontSize=numeric(st.fontSize,12);
+        // A registered length cannot use "normal"; read a concrete line
+        // height only when the native style supplies one. Otherwise keep
+        // its original normal line-height declaration out of the effect.
+        if(st.lineHeight!=="normal"&&Number.isFinite(parseFloat(st.lineHeight)))g.lineHeight=parseFloat(st.lineHeight);
+        g.labelMetrics=measureLabel(ch,st,g,node);
+      }
       result.set(ch,g);
     }
     return result;
@@ -258,7 +288,18 @@ function install() {
     const out={left:snapOffset(cx+(g.left-cx)*k),top:snapOffset(cy+(g.top-cy)*k+dy),
       width:g.width*k,height:g.height*k,
       paddingTop:g.paddingTop*k,paddingRight:g.paddingRight*k,paddingBottom:g.paddingBottom*k,paddingLeft:g.paddingLeft*k};
-    if(g.fontSize!==undefined)out.fontSize=g.fontSize*k;
+    if(g.fontSize!==undefined){
+      out.fontSize=g.fontSize*k;
+      // XUL label[crop=end] can introduce ellipses for a fractional shortfall.
+      // Preserve natural truncation for already-long labels, but give a
+      // previously complete label a small glyph-metrics safety margin.
+      if(g.labelMetrics?.complete){
+        const needed=(g.labelMetrics.textWidth+g.labelMetrics.extras)*k+3/pixelRatio();
+        const right=r.width*(1+card.sx)/2-(r.borderX||0);
+        const room=Math.max(out.width,right-out.left);
+        out.width=Math.min(room,Math.max(out.width,Math.ceil(needed*pixelRatio())/pixelRatio()));
+      }
+    }
     if(g.lineHeight!==undefined)out.lineHeight=g.lineHeight*k;
     return out;
   }
@@ -267,13 +308,19 @@ function install() {
     for(const ch of children){
       ch.removeAttribute("data-zr-bm-content");
       for(const k of contentProperties)ch.style.removeProperty(contentVar(k));
+      const saved=contentOriginals.get(ch);
+      if(saved){
+        for(const [name,old] of saved){if(old.value)ch.style.setProperty(name,old.value,old.priority);else ch.style.removeProperty(name);}
+        contentOriginals.delete(ch);
+      }
     }
     node.removeAttribute("data-zr-bm-content-lock");
     node.style.removeProperty("--zr-bm-lock-width");node.style.removeProperty("--zr-bm-lock-height");
     contentLocks.delete(node);
   }
+  function cssName(k){return k.replace(/[A-Z]/g,c=>"-"+c.toLowerCase());}
   function contentFrame(g){
-    return Object.fromEntries(contentProperties.filter(k=>g[k]!==undefined).map(k=>[k,g[k]+"px"]));
+    return Object.fromEntries(contentProperties.filter(k=>g[k]!==undefined).map(k=>[contentVar(k),g[k]+"px"]));
   }
   function lockContent(node,r,base,previous,card,duration){
     if(!base?.size)return;
@@ -283,16 +330,32 @@ function install() {
     node.style.setProperty("--zr-bm-lock-height",r.height+"px");
     node.setAttribute("data-zr-bm-content-lock","true");
     for(const [ch,g] of base){
-      const from=previous?.get(ch)||g,to=card.opacity===0?g:contentTarget(g,r,card);
+      const previousGeometry=previous?.get(ch)||g,to=card.opacity===0?g:contentTarget(g,r,card);
+      // Apply the same metrics from first animation frame through rest.
+      // At natural size use a small extra width only for labels known to
+      // be complete, preventing a temporary ellipsis while unlocking.
+      const from={...previousGeometry},end={...to};
+      if(g.labelMetrics?.complete){
+        const needed=(g.labelMetrics.textWidth+g.labelMetrics.extras)*((from.fontSize||g.fontSize)/g.fontSize)+2/pixelRatio();
+        from.width=Math.max(from.width,needed);
+        if(card.opacity===0)end.width=Math.max(end.width,g.labelMetrics.textWidth+g.labelMetrics.extras+2/pixelRatio());
+      }
+      const saved=new Map();contentOriginals.set(ch,saved);
       for(const k of contentProperties){
-        if(to[k]!==undefined)ch.style.setProperty(contentVar(k),to[k]+"px");
+        if(end[k]===undefined)continue;
+        const name=cssName(k);
+        saved.set(name,{value:ch.style.getPropertyValue(name),priority:ch.style.getPropertyPriority(name)});
+        ch.style.setProperty(contentVar(k),end[k]+"px");
+        // Lock the actual property to our interpolated variable. Important
+        // theme widths can no longer take over when WAAPI is canceled.
+        ch.style.setProperty(name,"var("+contentVar(k)+")","important");
       }
       ch.setAttribute("data-zr-bm-content","true");
       // Actual font-size / box dimensions; never transform text or icons.
       // The lock keeps these changes out of the surrounding flex layout.
-      if(!duration||!contentProperties.some(k=>Math.abs((from[k]??to[k]??0)-(to[k]??from[k]??0))>.01))continue;
+      if(!duration||!registeredContent||!contentProperties.some(k=>Math.abs((from[k]??end[k]??0)-(end[k]??from[k]??0))>.01))continue;
       try{
-        const a=ch.animate([contentFrame(from),contentFrame(to)],{duration,easing:FLIP_EASE,fill:"both"});
+        const a=ch.animate([contentFrame(from),contentFrame(end)],{duration,easing:FLIP_EASE,fill:"both"});
         watchAnimation(ch,a,()=>{});
       }catch{}
     }

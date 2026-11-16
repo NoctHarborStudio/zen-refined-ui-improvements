@@ -59,3 +59,9 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Outer button box stays fixed; only active and outgoing card children receive native size/position animations. Neighboring labels retain preview.6's positioning and text quality.
 - [ ] Check actual label crop, icons-only/folders, native clicks, light/dark, rapid interrupted transitions and restoration of child attributes/styles on cleanup.
 - [ ] Verify simultaneously on real Zen: sharp text, smooth motion, full content magnification/centering, stable background, no unexpected layout or overflow. Native child font-size animations require main-thread layout/paint; this remains a runtime performance test.
+
+## Preview.8 — native content continuity and crop
+
+- [ ] Compare computed icon width/height and label font-size immediately before and after Animation.finished, including a conflicting theme !important width. No jump. Animation and settled geometry consume the same registered custom properties.
+- [ ] Short complete labels (DeepL, ChatGPT, Mail) never acquire ellipsis merely due to hover; intrinsically cropped long labels still obey native width limits. Check real XUL label metrics at several DPI settings.
+- [ ] Verify outgoing content, rapid reversals, existing inline styles and their original priorities restore on unlock, reduced motion, and no changes to neighbor transforms or background.

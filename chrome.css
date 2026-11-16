@@ -60,9 +60,9 @@
 }
 /* Keep the native button in its original flex slot. The children are
  * out of flow only while expanding/closing; their real sizes animate
- * without affecting the parent or its neighbors. WAAPI wins over normal
- * size/position declarations. Important geometry on the outer box is
- * deliberate, but child animation properties must not be important. */
+ * without affecting the parent or its neighbors. WAAPI animates registered
+ * length variables; important inline geometry consumes those same variables
+ * during animation AND at rest, so theme rules cannot snap the icon back. */
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] {
   box-sizing: border-box !important;
   width: var(--zr-bm-lock-width) !important;
@@ -94,7 +94,6 @@
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] > .toolbarbutton-text[data-zr-bm-content] {
   font-size: var(--zr-bm-content-font-size);
-  line-height: var(--zr-bm-content-line-height, normal);
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card]::before {
   content: "";
