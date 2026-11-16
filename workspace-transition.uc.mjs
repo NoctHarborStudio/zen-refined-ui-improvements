@@ -48,7 +48,7 @@
     for(const t of tx.timers)win.clearTimeout(t);
     for(const resolve of tx.waiters)resolve();
     tx.timers.clear();tx.waiters.clear();
-    phase(null);active=null;
+    active=null;phase(null);
   }
   function pause(tx,ms){
     if(tx.cancelled)return Promise.resolve();
@@ -80,8 +80,8 @@
     return Promise.race([Promise.all(effects),pause(tx,length+60)]);
   }
   async function settled(tx){
-    // Native Places invalidation is asynchronous. Wait for two quiet
-    // chrome frames and a short mutation-quiet interval, with hard bounds.
+    // Native Places invalidation is asynchronous. Wait for a short
+    // mutation-quiet interval, with a hard upper bound.
     let changed=win.performance.now(),start=changed,observer=null;
     try{
       observer=new win.MutationObserver(()=>{changed=win.performance.now();});
@@ -92,14 +92,21 @@
   }
   async function run(nativeSwitch){
     if(typeof nativeSwitch!=="function")throw TypeError("Native workspace callback required");
+    // A newer explicit request supersedes an unfinished outgoing effect.
+    // Never let the older delayed callback select a workspace afterward.
+    if(active){active.superseded=true;cleanup(active);}
     if(!registered||!eligible({dead,busy:!!active,reduced:reduced.matches,startup:root.hasAttribute("data-zr-startup-phase")||root.getAttribute("data-op-startup-ready")==="pending",enabled:prefs.getBoolPref(PREF,true),fullscreen:root.hasAttribute("customizing")||root.getAttribute("inDOMFullscreen")==="true"||root.getAttribute("inFullscreen")==="true"}))return nativeSwitch();
-    const tx={animations:new Set(),styles:new Map(),timers:new Set(),waiters:new Set(),cancelled:false};active=tx;
+    const tx={animations:new Set(),styles:new Map(),timers:new Set(),waiters:new Set(),cancelled:false,superseded:false};active=tx;
+    // Native switching owns its own promise; visual gating must never
+    // remain stuck if that promise is slow or fails to settle.
+    tx.timers.add(win.setTimeout(()=>cleanup(tx),2500));
     let called=false,result;
     try{
       const old=units();
       if(!old.length){cleanup(tx);called=true;return await nativeSwitch();}
       phase("out");
       await animate(tx,old,true);
+      if(tx.superseded||dead&&win.closed)return;
       if(!tx.cancelled){phase("swap");cancelEffects(tx);}
       called=true;result=await nativeSwitch();
       if(tx.cancelled)return result;
@@ -111,7 +118,7 @@
       await motion;
       return result;
     }catch(error){
-      if(!called){called=true;cleanup(tx);return nativeSwitch();}
+      if(!called){called=true;cleanup(tx);return tx.superseded?undefined:nativeSwitch();}
       throw error;
     }finally{cleanup(tx);}
   }

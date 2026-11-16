@@ -35,5 +35,5 @@ test("late startup allowed only during initial chrome setup; established windows
  assert.equal(eligible(true,false,null,6500),false);
  assert.ok(source.includes("deadline=started+5000"));
  assert.ok(source.includes("baseline.add(n)"));
- assert.ok(source.includes("alreadyPainted?.72:0"));
+ assert.ok(source.includes("alreadyPainted ? .72 : 0"));
 });

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.25
+
+- Harden Center Workspace Transition against overlapping workspace requests and slow native promises. A newer request cancels the older delayed selection; a 2.5s watchdog always releases the visual gate. Add runtime-shaped lifecycle tests for phase ordering, cleanup and fallback.
+
 ## 0.6.0-preview.24
 
 - Restore Center Assembly for late initial chrome startup without hiding already painted controls; extend readiness deadline to five seconds and include late toolbar controls/tabs. No full-window overlay.

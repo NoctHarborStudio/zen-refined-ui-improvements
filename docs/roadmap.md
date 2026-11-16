@@ -113,3 +113,5 @@ User reports the rest of the Smart Search UI looks good. Slow timeline travel by
 ## Preview.24 — Center Assembly recovery and workspace transition
 
 Allow late initial chrome startup, not established-window replay; mark previously painted controls and use a partial reveal instead of hiding them. Wait up to five seconds for OnePlane and animate late controls. Introduce explicit workspace transition API for Home/Hub with native switch ownership and bounded bookmark settlement. No full-window or page veil. OnePlane contour hold and Home keyed state updates require companion integration. Validate cold startup, projection, Home startup, repeated switching, reduced motion and unloading. Native background flicker is not confirmed fixed.
+
+Preview.25 hardens overlapping requests and adds a 2.5s visual watchdog; OnePlane preview.38 supplies Home/Hub integration. Real cold-start and workspace runtime checks remain pending.

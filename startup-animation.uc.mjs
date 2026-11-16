@@ -159,7 +159,7 @@
     if(!Number.isFinite(opacity)||opacity<=0){n.removeAttribute(MANAGED);return false;}
     seen.add(n);
     const alreadyPainted=baseline.has(n)||late&&!clip&&!n.matches?.("#PlacesToolbarItems > *");
-    const initial=alreadyPainted?.72:0;
+    const initial=alreadyPainted ? .72 : 0;
     if(alreadyPainted)clip=false;
     const nativeTranslate=cs.translate||"none";
     const canMove=nativeTranslate==="none"||/^0(?:px|%)?(?: 0(?:px|%)?){0,2}$/.test(nativeTranslate);
