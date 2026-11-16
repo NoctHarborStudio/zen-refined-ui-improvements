@@ -1,10 +1,10 @@
 {
   "id": "9d788b55-d497-41da-8444-993c603e89e4",
   "name": "Zen Refined — UI Improvements",
-  "description": "Modular visual and usability improvements for Zen Browser, including Magnetic Bookmarks.",
+  "description": "Modular visual and usability improvements for Zen Browser: Magnetic Bookmarks and optional startup placeholder suppression.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.4.0-preview.2",
+  "version": "0.4.0-preview.3",
   "style": {
     "chrome": "chrome.css"
   },
@@ -16,12 +16,17 @@
     "animation"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-16T00:15:03.000Z",
+  "updatedAt": "2026-11-16T00:33:25.023Z",
   "fork": [
     "zen"
   ],
   "scripts": {
     "bookmarks.uc.mjs": {
+      "include": [
+        "chrome://browser/content/browser.xhtml"
+      ]
+    },
+    "startup.uc.mjs": {
       "include": [
         "chrome://browser/content/browser.xhtml"
       ]

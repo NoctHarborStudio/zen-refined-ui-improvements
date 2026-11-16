@@ -9,14 +9,19 @@
   position: relative !important;
   overflow: visible !important;
 }
-/* OnePlane's compact two-row overlay measures the actual bookmarks height.
- * Reserve lift room permanently, not only on hover, and leave the upper row
- * untouched. Standalone Zen uses the adaptive vertical bound in the script.
- */
-:root[oneplane-active="true"] #PersonalToolbar[data-zr-magnetic-enabled] {
+/* Fixed bottom reserve, never a hover-dependent row height. The original
+ * top padding remains untouched so the resting bookmarks sit higher. */
+#PersonalToolbar[data-zr-magnetic-enabled] {
   box-sizing: border-box !important;
-  padding-top: calc(var(--zr-bm-base-pad-top, 0px) + 8px) !important;
-  min-height: calc(var(--zr-bm-base-height, 24px) + 8px) !important;
+  padding-bottom: calc(var(--zr-bm-base-pad-bottom, 0px) + var(--zr-bm-reserve, 17px)) !important;
+  min-height: calc(var(--zr-bm-base-height, 24px) + var(--zr-bm-reserve, 17px)) !important;
+  align-items: flex-start !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
+  align-items: flex-start !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item {
+  align-self: flex-start !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled][data-zr-bm-room] :is(#personal-bookmarks, #PlacesToolbar, #PlacesToolbarItems) {
   overflow: visible !important;
@@ -24,36 +29,23 @@
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] {
   position: relative;
   flex-shrink: 0 !important;
-  transform-origin: center center !important;
-  margin-inline-start: var(--zr-bm-margin-start, 0px) !important;
-  margin-inline-end: var(--zr-bm-margin-end, 0px) !important;
-  scale: 1 1 !important;
-  translate: 0 0 !important;
-  transition:
-    margin-inline-start var(--zr-bm-duration) var(--zr-bm-ease),
-    margin-inline-end var(--zr-bm-duration) var(--zr-bm-ease),
-    scale var(--zr-bm-duration) var(--zr-bm-ease),
-    translate var(--zr-bm-duration) var(--zr-bm-ease),
-    background-color 180ms ease,
-    box-shadow 180ms ease !important;
-}
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] {
+  transform-origin: center top !important;
   margin-inline-start: calc(var(--zr-bm-margin-start, 0px) + var(--zr-bm-grow, 0px)) !important;
   margin-inline-end: calc(var(--zr-bm-margin-end, 0px) + var(--zr-bm-grow, 0px)) !important;
-  scale: var(--zr-bm-scale-x, 1.42) var(--zr-bm-scale-y, 1.36) !important;
-  translate: 0 calc(-1 * var(--zr-bm-lift, 6px)) !important;
+  scale: var(--zr-bm-scale-x, 1) var(--zr-bm-scale-y, 1) !important;
+  translate: 0 0 !important;
+  transition: background-color 180ms ease, box-shadow 180ms ease !important;
+}
+#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] {
   background-color: color-mix(in srgb, currentColor 16%, transparent) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, .20) !important;
   border-radius: 7px !important;
   z-index: 3;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-managed] :is(.toolbarbutton-icon, .toolbarbutton-text) {
-  scale: 1 1 !important;
+  scale: var(--zr-bm-inner-x, 1) var(--zr-bm-inner-y, 1) !important;
   transform-origin: center;
-  transition: scale var(--zr-bm-duration) var(--zr-bm-ease) !important;
-}
-#PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > toolbarbutton.bookmark-item[data-zr-bm-active] :is(.toolbarbutton-icon, .toolbarbutton-text) {
-  scale: var(--zr-bm-inner-x, .83) var(--zr-bm-inner-y, .87) !important;
+  transition: none !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] > #zr-bookmark-indicator {
   display: block !important;
@@ -83,3 +75,14 @@
   }
 }
 
+/* Integration with OnePlane: use a stable mask calculated from the
+ * resting row. Match its complete activation selector and override only
+ * the surface mask/height, not its tint, blur, panel motion or controls. */
+@media (min-width: 900px) and (prefers-reduced-transparency: no-preference) {
+  :root[oneplane-active="true"][zen-compact-mode="true"]:not([customizing], [inDOMFullscreen="true"], [inFullscreen="true"], [popup-window]):has(#nav-bar-customization-target > #oneplane-tabs[data-ready="true"])
+    #zen-appcontent-navbar-wrapper > #oneplane-toolbar-surface[data-zr-bm-stable-contour] {
+    mask-image: var(--zr-bm-contour-mask) !important;
+    mask-size: 100% var(--zr-bm-contour-height) !important;
+    height: max(100%, var(--op-measured-toolbar-height, var(--op-height)), var(--zr-bm-contour-height)) !important;
+  }
+}

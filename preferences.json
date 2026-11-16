@@ -37,32 +37,6 @@
   },
   {
     "type": "dropdown",
-    "property": "zen.refined.bookmarks.lift",
-    "label": "Upward lift",
-    "value": "number",
-    "defaultValue": 6,
-    "placeholder": false,
-    "options": [
-      {
-        "label": "Off",
-        "value": 0
-      },
-      {
-        "label": "3 px",
-        "value": 3
-      },
-      {
-        "label": "6 px",
-        "value": 6
-      },
-      {
-        "label": "9 px",
-        "value": 9
-      }
-    ]
-  },
-  {
-    "type": "dropdown",
     "property": "zen.refined.bookmarks.duration",
     "label": "Expansion animation duration",
     "value": "number",
@@ -97,6 +71,18 @@
     "type": "checkbox",
     "property": "zen.refined.bookmarks.glow",
     "label": "Indicator glow",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.bookmarks.stable-background",
+    "label": "Stabilize OnePlane background during bookmark hover",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.startup.disable-placeholders",
+    "label": "Disable Firefox startup placeholder windows (restart required)",
     "defaultValue": true
   }
 ]

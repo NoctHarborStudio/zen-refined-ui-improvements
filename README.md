@@ -8,13 +8,18 @@ Zen Refined is independent of [OnePlane](https://github.com/NoctHarborStudio/zen
 
 ## Magnetic Bookmarks
 
-A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle upward lift and an inertial liquid indicator. The hovered bookmark reserves extra layout space so adjacent bookmarks move rather than overlap. The indicator remains anchored near the hovered bookmark's center and responds gently to the pointer inside it.
+A responsive bookmark toolbar with smoothly expanding native bookmarks, top-anchored downward expansion and an inertial liquid indicator. The hovered bookmark reserves extra layout space so adjacent bookmarks move rather than overlap. The indicator remains anchored near the hovered bookmark's center and responds gently to the pointer inside it.
 
 - 142% horizontal magnification by default, limited by available space.
-- 6 px upward lift, 240 ms expansion, small 12–18 px indicator.
+- Downward expansion from a higher resting row, 240 ms animation, small 12–18 px indicator.
+- Fixed lower reserve and a shared horizontal expansion budget. With OnePlane, a stable contour mask covers the resting row plus expansion room without changing every hover frame.
 - A spring-based indicator stretches in flight and relaxes at rest.
 - Native bookmark items, click actions and folder menus are retained.
 - Reduced-motion support and individual controls in Sine.
+
+## Startup appearance
+
+The optional startup module suppresses Gecko's early blank window and Windows pre-XUL skeleton using `browser.startup.blankWindow` and `browser.startup.preXulSkeletonUI`. It cannot suppress OS-level window animations or guarantee removal of every white flash. Normal browser exit keeps the setting for the next launch.
 
 ## Install the preview in Sine
 
@@ -30,7 +35,7 @@ Sine requires explicit permission to run JavaScript from unpublished GitHub mods
 
 ## Configuration
 
-All settings are available in the mod's Sine preferences. Disable Magnetic Bookmarks to restore the native bookmarks appearance. Disable or remove Zen Refined to unload the bookmark module.
+All settings are available in the mod's Sine preferences. Disable Magnetic Bookmarks to restore the native bookmarks appearance. Disable or remove Zen Refined to unload its modules. **Disable Firefox startup placeholder windows** is enabled by default; it sets the two supported native startup preferences to false and preserves their previous state. Changes apply on the next full restart. Turn it off to restore the original settings. It does not modify Windows or Windhawk. **Stabilize OnePlane background during bookmark hover** is independently configurable.
 
 ## Compatibility
 
