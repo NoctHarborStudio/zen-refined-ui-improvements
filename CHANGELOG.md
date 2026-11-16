@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0-preview.8
+
+- Unify recent downloads and full dock at 430 CSS px, with a shared renderer and identical per-file actions, status, progress and statistics.
+- Show the latest four downloads in the recent panel, with direct Open / Show in folder actions and an All downloads handoff. Pause auto-dismiss while hovered or focused.
+- Start the fluid reveal from the measured icon-sized seed, commit its closed style before animating, and align both panels at the same top anchor.
+
 ## 0.6.0-preview.7
 
 - Resolve download reveal from the real sidebar icon; mirror it on either side and morph the dock from the detail card using matching geometry.

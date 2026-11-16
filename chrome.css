@@ -202,7 +202,6 @@
 #zr-download-indicator .zr-download-speed:empty { display:none; }
 #zr-download-indicator .zr-download-track { width:34px; }
 #zr-download-indicator:not([data-transferring]) .zr-download-track { display:none !important; }
-#zr-download-card[data-state="idle"] .zr-download-track { display:none !important; }
 /* Hide the redundant footer entry only while native dock is installed.
  * Do not disable Library or change CustomizableUI/prefs. */
 :root[data-zr-downloads-native]:not([customizing]) :is(#zen-sidebar-foot-buttons,#zen-sidebar-bottom-buttons) #zen-library-button { display:none !important; }
@@ -221,57 +220,40 @@
 #zr-download-indicator[data-zr-hosted] { position:relative !important;inset:auto !important;margin:0; }
 #zr-download-indicator:focus-visible,#zr-download-card:focus-visible { outline:2px solid currentColor;outline-offset:2px; }
 #zr-download-card {
-  position:fixed !important;
-  left:0 !important;
-  top:0 !important;
+  position:fixed !important;left:0 !important;top:0 !important;
   translate:var(--zr-overlay-x,6px) var(--zr-overlay-y,70px);
   z-index:2147483000 !important;
-  display:flex !important;
-  width:var(--zr-overlay-width,310px);
-  align-items:center;
-  gap:12px;
-  padding:12px 13px;
-  border-radius:11px;
+  display:flex !important;flex-direction:column;
+  width:var(--zr-overlay-width,430px);
+  max-height:min(500px,calc(100vh - 16px));
+  padding:12px;gap:10px;
   border:1px solid var(--zr-download-outline);
-  background:var(--zr-download-surface);
-  box-shadow:0 6px 22px #0003;
-  text-align:start;
-  cursor:pointer;
-  opacity:0;
-  visibility:hidden;
-  pointer-events:none;
-  transform-origin:left center;
+  border-radius:12px;
+  box-shadow:0 8px 28px #0004;
+  opacity:0;visibility:hidden;pointer-events:none;
   transform:translate(var(--zr-seed-dx,0px),var(--zr-seed-dy,0px));
-  clip-path:var(--zr-seed-clip,inset(39% 94% 39% 0 round 14px));
-  transition:clip-path 500ms cubic-bezier(.42,0,.3,1),transform 500ms cubic-bezier(.32,0,.25,1),opacity 460ms ease,visibility 500ms;
+  clip-path:var(--zr-seed-clip,inset(49% 49% 49% 49% round 9px));
+  transition:clip-path 500ms cubic-bezier(.42,0,.3,1),transform 500ms cubic-bezier(.32,0,.25,1),opacity 420ms ease,visibility 500ms;
 }
-#zr-download-card[data-side="right"] { transform-origin:right center; }
 #zr-download-card[data-open] {
   opacity:1;visibility:visible;pointer-events:auto;transform:none;
   clip-path:inset(-22px -22px -22px -22px round 22px);
-  transition:clip-path 780ms cubic-bezier(.4,0,.18,1),transform 780ms cubic-bezier(.32,0,.25,1),opacity 400ms ease,visibility 0s;
+  transition:clip-path 780ms cubic-bezier(.55,0,.24,1),transform 780ms cubic-bezier(.55,0,.24,1),opacity 120ms ease,visibility 0s;
 }
-#zr-download-card :is(.zr-download-body,.zr-download-icon) { opacity:0;transition:opacity 160ms ease; }
-#zr-download-card[data-open] :is(.zr-download-body,.zr-download-icon) { opacity:1;transition:opacity 440ms ease 230ms; }
-#zr-download-card .zr-download-body { display:flex;flex:1;min-width:0;flex-direction:column;gap:8px; }
-#zr-download-card .zr-download-line { display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0; }
-#zr-download-card .zr-download-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;min-width:0; }
-#zr-download-card .zr-download-speed,#zr-download-card .zr-download-status,#zr-download-card .zr-download-bytes { flex-shrink:0;white-space:nowrap;font-variant-numeric:tabular-nums; }
-#zr-download-card .zr-download-speed { font-weight:600; }
-#zr-download-card .zr-download-status,#zr-download-card .zr-download-bytes { opacity:.68;font-size:10px; }
+#zr-download-card > * { opacity:0;transition:opacity 130ms ease; }
+#zr-download-card[data-open] > * { opacity:1;transition:opacity 360ms ease 300ms; }
+#zr-download-card .zr-dock-row,#zr-download-card .zr-dock-title { cursor:pointer; }
+
 .zr-download-track { position:relative;display:block;overflow:hidden;height:3px;border-radius:4px;background:color-mix(in srgb,currentColor 13%,transparent); }
 .zr-download-fill { display:block;width:100%;height:100%;border-radius:4px;background:currentColor;opacity:.82;transform-origin:left center;transform:scaleX(var(--zr-download-progress,0));transition:transform 420ms cubic-bezier(.22,.72,.2,1); }
-#zr-download-indicator[data-side="right"] .zr-download-fill,#zr-download-card[data-side="right"] .zr-download-fill { transform-origin:right center; }
-:is(#zr-download-indicator,#zr-download-card)[data-indeterminate] .zr-download-fill { width:42%;animation:zr-download-unknown 1.45s ease-in-out infinite; }
+#zr-download-indicator[data-side="right"] .zr-download-fill { transform-origin:right center; }
+#zr-download-indicator[data-indeterminate] .zr-download-fill { width:42%;animation:zr-download-unknown 1.45s ease-in-out infinite; }
 @keyframes zr-download-unknown { 0%,100%{transform:translateX(-110%)} 50%{transform:translateX(240%)} }
 .zr-download-icon {
   display:block;flex:0 0 19px;width:19px;height:19px;background:currentColor;
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v12m-5-5 5 5 5-5M5 16v4h14v-4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
 }
-#zr-download-card .zr-download-icon { width:22px;height:22px;flex-basis:22px; }
-#zr-download-card[data-state="complete"] .zr-download-icon {
-  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5L20 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
+
 .zr-download-flight { position:fixed !important;z-index:2147483001 !important;display:grid;place-items:center;width:33px;height:33px;border-radius:9px;background:var(--zr-download-surface);border:1px solid color-mix(in srgb,currentColor 12%,transparent);box-shadow:0 4px 12px #0003;pointer-events:none !important; }
 #zr-page-progress {
   position:fixed !important;
@@ -297,7 +279,7 @@
 :root[data-zr-startup-phase] :is(#zr-download-indicator,#zr-download-card,#zr-download-dock,#zr-download-outside,.zr-download-flight,#zr-page-progress) { visibility:hidden !important; }
 @media (prefers-reduced-motion:reduce) {
   #zr-download-indicator,#zr-download-card,#zr-download-dock,.zr-download-fill,#zr-page-progress,#zr-page-progress .zr-page-progress-fill { transition:none !important;animation:none !important; }
-  :is(#zr-download-indicator,#zr-download-card)[data-indeterminate] .zr-download-fill { transform:scaleX(1);opacity:.55; }
+  #zr-download-indicator[data-indeterminate] .zr-download-fill { transform:scaleX(1);opacity:.55; }
   #zr-page-progress[data-indeterminate] .zr-page-progress-fill { opacity:.65; }
 }
 
@@ -336,50 +318,56 @@
 #zr-download-card[data-handoff] { opacity:0;visibility:hidden;transition:none !important; }
 #zr-download-dock > :is(.zr-dock-header,.zr-dock-sort,.zr-dock-list,.zr-dock-empty,.zr-dock-more,.zr-dock-notice) { opacity:0;transition:opacity 180ms ease; }
 #zr-download-dock[data-open] > :is(.zr-dock-header,.zr-dock-sort,.zr-dock-list,.zr-dock-empty,.zr-dock-more,.zr-dock-notice) { opacity:1;transition:opacity 440ms ease 160ms; }
-#zr-download-dock .zr-dock-header { display:flex;align-items:center;justify-content:space-between;padding:2px 2px 8px;border-bottom:1px solid color-mix(in srgb,currentColor 10%,transparent); }
-#zr-download-dock .zr-dock-title { font-size:14px;font-weight:600; }
-#zr-download-dock button { appearance:none;color:inherit;font:inherit;cursor:pointer;border:0;background:color-mix(in srgb,currentColor 7%,transparent);border-radius:6px;padding:7px; }
-#zr-download-dock button:hover:not(:disabled) { background:color-mix(in srgb,currentColor 15%,transparent); }
-#zr-download-dock button:focus-visible { outline:2px solid currentColor;outline-offset:2px; }
-#zr-download-dock button:disabled { opacity:.35;cursor:default; }
-#zr-download-dock .zr-dock-close { width:27px;height:27px;padding:0;font-size:20px;line-height:1; }
-#zr-download-dock .zr-dock-list { display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-gutter:stable;padding-inline-end:9px; }
-#zr-download-dock .zr-dock-row { display:flex;align-items:center;gap:9px;padding:10px 9px;border-radius:8px;background:color-mix(in srgb,var(--zr-download-row) 75%,transparent);flex-shrink:0; }
-#zr-download-dock .zr-dock-row-body { flex:1;min-width:0;display:flex;flex-direction:column;gap:5px; }
-#zr-download-dock .zr-dock-name { font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
-#zr-download-dock .zr-dock-meta { font-size:10px;opacity:.7;white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
-#zr-download-dock .zr-dock-row-actions { display:flex;gap:5px;align-items:center;justify-content:flex-end;flex:0 0 auto; }
-#zr-download-dock :is(.zr-dock-folder,.zr-dock-open-file) { font-size:10px;white-space:nowrap;flex:0 0 auto; }
-#zr-download-dock .zr-dock-stats { font-size:9px;opacity:.62;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-variant-numeric:tabular-nums; }
-#zr-download-dock .zr-dock-open-file { background:color-mix(in srgb,currentColor 13%,transparent); }
-@media(max-width:460px) { #zr-download-dock .zr-dock-row-actions { flex-direction:column;align-items:stretch; } }
-#zr-download-dock .zr-dock-row:not([data-state="active"]) .zr-download-track { display:none; }
-#zr-download-dock .zr-dock-row[data-indeterminate] .zr-download-fill { width:42%;animation:zr-download-unknown 1.45s ease-in-out infinite; }
-#zr-download-dock .zr-dock-empty { text-align:center;opacity:.65;padding:28px 8px; }
-#zr-download-dock .zr-dock-notice { font-size:10px;opacity:.8; }
-#zr-download-dock .zr-dock-notice:empty,#zr-download-dock [hidden] { display:none !important; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-header { display:flex;align-items:center;justify-content:space-between;padding:2px 2px 8px;border-bottom:1px solid color-mix(in srgb,currentColor 10%,transparent); }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-title { font-size:14px;font-weight:600; }
+:is(#zr-download-card,#zr-download-dock) button { appearance:none;color:inherit;font:inherit;cursor:pointer;border:0;background:color-mix(in srgb,currentColor 7%,transparent);border-radius:6px;padding:7px; }
+:is(#zr-download-card,#zr-download-dock) button:hover:not(:disabled) { background:color-mix(in srgb,currentColor 15%,transparent); }
+:is(#zr-download-card,#zr-download-dock) button:focus-visible { outline:2px solid currentColor;outline-offset:2px; }
+:is(#zr-download-card,#zr-download-dock) button:disabled { opacity:.35;cursor:default; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-close { width:27px;height:27px;padding:0;font-size:20px;line-height:1; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-list { display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:0;scrollbar-width:thin;scrollbar-gutter:stable;padding-inline-end:9px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-row { display:flex;align-items:center;gap:9px;padding:10px 9px;border-radius:8px;background:color-mix(in srgb,var(--zr-download-row) 75%,transparent);flex-shrink:0; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-row-body { flex:1;min-width:0;display:flex;flex-direction:column;gap:5px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-name { font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-meta { font-size:10px;opacity:.7;white-space:nowrap;text-overflow:ellipsis;overflow:hidden; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-row-actions { display:flex;gap:5px;align-items:center;justify-content:flex-end;flex:0 0 auto; }
+:is(#zr-download-card,#zr-download-dock) :is(.zr-dock-folder,.zr-dock-open-file) { font-size:10px;white-space:nowrap;flex:0 0 auto; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-stats { font-size:9px;opacity:.62;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;font-variant-numeric:tabular-nums; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-open-file { background:color-mix(in srgb,currentColor 13%,transparent); }
+@media(max-width:460px) { :is(#zr-download-card,#zr-download-dock) .zr-dock-row-actions { flex-direction:column;align-items:stretch; } }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-row:not([data-state="active"]) .zr-download-track { display:none; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-row[data-indeterminate] .zr-download-fill { width:42%;animation:zr-download-unknown 1.45s ease-in-out infinite; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-empty { text-align:center;opacity:.65;padding:28px 8px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-notice { font-size:10px;opacity:.8; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-notice:empty,:is(#zr-download-card,#zr-download-dock) [hidden] { display:none !important; }
 @media(prefers-reduced-motion:reduce) {
-  #zr-download-dock,#zr-download-dock .zr-download-fill { transition:none !important;animation:none !important; }
+  #zr-download-dock,:is(#zr-download-card,#zr-download-dock) .zr-download-fill { transition:none !important;animation:none !important; }
 }
 
 /* Header confirmation stays entirely inside the downloads dock. */
-#zr-download-dock .zr-dock-header { min-height:38px; }
-#zr-download-dock :is(.zr-dock-header-normal,.zr-dock-header-confirm) { width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px; }
-#zr-download-dock .zr-dock-header-confirm { animation:zr-dock-confirm-in 200ms ease both; }
-#zr-download-dock .zr-dock-header-actions { display:flex;align-items:center;gap:6px; }
-#zr-download-dock .zr-dock-question { flex:1;min-width:0;text-align:center;font-weight:600;font-size:12px; }
-#zr-download-dock :is(.zr-dock-yes,.zr-dock-no) { min-width:52px;padding:7px 11px; }
-#zr-download-dock .zr-dock-yes { background:color-mix(in srgb,currentColor 15%,transparent); }
-#zr-download-dock .zr-dock-sort { display:flex;gap:6px; }
-#zr-download-dock .zr-dock-sort button { flex:1;text-align:center; }
-#zr-download-dock .zr-dock-sort button[aria-pressed="true"] { background:color-mix(in srgb,currentColor 14%,transparent);font-weight:600; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-header { min-height:38px; }
+:is(#zr-download-card,#zr-download-dock) :is(.zr-dock-header-normal,.zr-dock-header-confirm) { width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-header-confirm { animation:zr-dock-confirm-in 200ms ease both; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-header-actions { display:flex;align-items:center;gap:6px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-question { flex:1;min-width:0;text-align:center;font-weight:600;font-size:12px; }
+:is(#zr-download-card,#zr-download-dock) :is(.zr-dock-yes,.zr-dock-no) { min-width:52px;padding:7px 11px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-yes { background:color-mix(in srgb,currentColor 15%,transparent); }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-sort { display:flex;gap:6px; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-sort button { flex:1;text-align:center; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-sort button[aria-pressed="true"] { background:color-mix(in srgb,currentColor 14%,transparent);font-weight:600; }
 @keyframes zr-dock-confirm-in { from {opacity:0;translate:0 -3px;} to {opacity:1;translate:none;} }
 @media(prefers-reduced-motion:reduce) {
-  #zr-download-card :is(.zr-download-body,.zr-download-icon),#zr-download-dock .zr-dock-header-confirm { transition:none !important;animation:none !important; }
+  :is(#zr-download-card,#zr-download-dock) .zr-dock-header-confirm { transition:none !important;animation:none !important; }
 }
 
 /* A translucent native-painted surface, without fading its text or controls. */
 :is(#zr-download-card,#zr-download-dock) { background:transparent;isolation:isolate; }
 :is(#zr-download-card,#zr-download-dock)::before { content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--zr-download-surface);opacity:.88;pointer-events:none; }
 :is(#zr-download-card,#zr-download-dock)[data-open] { backdrop-filter:blur(12px); }
-@media(prefers-reduced-motion:reduce) { #zr-download-dock > * { transition:none !important; } }
+@media(prefers-reduced-motion:reduce) { :is(#zr-download-card,#zr-download-dock) > * { transition:none !important; } }
+
+/* Shared recent/full view: seed is committed with transitions disabled. */
+:is(#zr-download-card,#zr-download-dock)[data-preparing] { transition:none !important;opacity:0 !important;visibility:hidden !important; }
+:is(#zr-download-card,#zr-download-dock) .zr-dock-list { overflow-y:auto;overflow-x:hidden; }
+#zr-download-card .zr-dock-all { font-weight:600; }
+@media(prefers-reduced-motion:reduce) { #zr-download-card > * { transition:none !important; } }

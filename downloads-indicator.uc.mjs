@@ -13,14 +13,14 @@
   if(root.hasAttribute("popup-window")||typeof window.addUnloadListener!=="function")return;
   window[KEY]?.dispose?.();
   let dead=false,epoch=0,view=null,list=null,node=null,fill=null,speed=null,icon=null,host=null;
-  let card=null,cardFill=null,cardName=null,cardSpeed=null,cardStatus=null,cardBytes=null,cardIcon=null,flight=null,flightAnimation=null;
+  let card=null,cardList=null,cardEmpty=null,cardNotice=null,flight=null,flightAnimation=null;
   let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,flightTimer=0,latest=null;
   let updateTimer=0,hideTimer=0,readyObserver=null,layoutObserver=null,initialized=false,hydrating=false;
   let lastDockRect=null,followFrame=0,followUntil=0,overlayUntil=0;
   let dock=null,dockList=null,dockEmpty=null,dockMore=null,dockBackdrop=null,dockNotice=null,dockOpen=false,limit=30;
-  const history=new Map(),rows=new Map();
-  let historyOrder=null,cardHeight=82,dockHeight=0,dockFromCard=false;
-  const CARD_WIDTH=310,DOCK_WIDTH=430;
+  const history=new Map(),rows=new Map(),recentRows=new Map();
+  let historyOrder=null,recentOrder=null,cardHeight=0,dockHeight=0,dockFromCard=false;
+  const OVERLAY_WIDTH=430,RECENT_LIMIT=4;
   let sortKey="time",sortDir=-1,headerNormal=null,headerConfirm=null,clearButton=null,sortTime=null,sortSize=null,yesButton=null,noButton=null,confirming=false,clearing=false;
   const CLEARABLE=d=>d.stopped&&!d.hasPartialData&&!d.hasBlockedData;
   let lastRender=0,snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"}),batch=new Map(),fresh=new WeakSet();
@@ -58,7 +58,7 @@
     const sec=Math.round(ms/1000),h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
     return (h?h+" h ":"")+(m?m+" min ":"")+s+" s";
   }
-  function refreshStatistics(){if(dockOpen){renderDock();positionOverlays();}}
+  function refreshStatistics(){if(cardOpen)renderRecent();if(dockOpen)renderDock();if(cardOpen||dockOpen)positionOverlays();}
   function sortBytes(v){return v.known?v.total:v.success?v.bytes:null;}
   function syncTheme(...targets){
     // Sample only on structural changes / opening, never on byte updates.
@@ -132,12 +132,12 @@
       const iconY=i.height>0?i.top+i.height/2:y+height/2;
       const iconX=i.width>0?i.left+i.width/2:edge;
       const x=Math.max(8,Math.min(w-8,iconX));
-      lastDockRect={edge,top:y,height,x,y:iconY,side:resolved};
+      lastDockRect={edge,top:y,height,x,y:iconY,side:resolved,seedW:i.width||19,seedH:i.height||19};
       return lastDockRect;
     }
     if(node&&visible(node)){
       const n=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
-      lastDockRect={edge:right?n.left:n.right,top:n.top,height:n.height,x:i.left+i.width/2,y:i.top+i.height/2,side:side()};
+      lastDockRect={edge:right?n.left:n.right,top:n.top,height:n.height,x:i.left+i.width/2,y:i.top+i.height/2,side:side(),seedW:i.width||19,seedH:i.height||19};
       return lastDockRect;
     }
     if(lastDockRect?.side===side())return lastDockRect;
@@ -149,7 +149,7 @@
   function positionOverlay(n,r,width,height){
     const right=r.side==="right",w=window.innerWidth,h=window.innerHeight;
     const x=clamp(right?r.edge-width-8:r.edge+8,6,w-width-6);
-    const y=clamp(r.top+(r.height-height)/2,8,h-height-8);
+    const y=clamp(r.top,8,h-height-8);
     // Separate positioning translate from entrance transform. No extra
     // CSS transition on the position: both surfaces follow native motion.
     setVar(n,"--zr-overlay-x",x+"px");setVar(n,"--zr-overlay-y",y+"px");
@@ -169,17 +169,17 @@
   function positionOverlays(following=false){
     if(!node||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
     const r=dockRect(following);
-    const cardWidth=Math.min(CARD_WIDTH,Math.max(1,window.innerWidth-12));
-    const seed={x:r.x-16.5,y:r.y-16.5,width:33,height:33,radius:9};
+    const width=Math.min(OVERLAY_WIDTH,Math.max(1,window.innerWidth-12));
+    const sw=Math.min(19,r.seedW||19),sh=Math.min(19,r.seedH||19);
+    const seed={x:r.x-sw/2,y:r.y-sh/2,width:sw,height:sh,radius:Math.min(sw,sh)/2};
     let cardBox;
     if(cardOpen||dockOpen||current()<overlayUntil){
-      setVar(card,"--zr-overlay-width",cardWidth+"px");
-      if(!following)cardHeight=card.offsetHeight||82;
-      cardBox=positionOverlay(card,r,cardWidth,cardHeight);
+      setVar(card,"--zr-overlay-width",width+"px");
+      if(!following||!cardHeight)cardHeight=card.offsetHeight||82;
+      cardBox=positionOverlay(card,r,width,cardHeight);
       seedOverlay(card,cardBox,seed);
     }
     if(dockOpen||current()<overlayUntil){
-      const width=Math.min(DOCK_WIDTH,Math.max(1,window.innerWidth-12));
       setVar(dock,"--zr-overlay-width",width+"px");
       if(!following||!dockHeight)dockHeight=dock.offsetHeight||Math.min(500,window.innerHeight-16);
       const dockBox=positionOverlay(dock,r,width,dockHeight);
@@ -268,14 +268,23 @@
     icon=make("span","zr-download-icon");icon.setAttribute("aria-hidden","true");
     const [track,f]=makeTrack();fill=f;node.append(speed,icon,track);
     node.addEventListener("click",()=>{cancelFlight();if(dockOpen)closeDock();else if(cardOpen)closeCard();else openCard();});
-    card=make("button","zr-download-card");card.id="zr-download-card";card.type="button";
-    card.setAttribute("aria-label","Open downloads dock");card.setAttribute("aria-hidden","true");card.setAttribute("data-state","idle");card.tabIndex=-1;
-    const body=make("span","zr-download-body"),line=make("span","zr-download-line"),bottom=make("span","zr-download-line");
-    cardName=make("span","zr-download-name");cardSpeed=make("span","zr-download-speed");cardStatus=make("span","zr-download-status");cardBytes=make("span","zr-download-bytes");
-    line.append(cardName,cardSpeed);bottom.append(cardBytes,cardStatus);
-    const [ct,cf]=makeTrack();cardFill=cf;body.append(line,ct,bottom);
-    cardIcon=make("span","zr-download-icon");cardIcon.setAttribute("aria-hidden","true");card.append(cardIcon,body);
-    card.addEventListener("click",()=>openDock(true));root.append(card);
+    card=make("section","zr-download-card");card.id="zr-download-card";
+    card.setAttribute("role","region");card.setAttribute("aria-label","Recent downloads");card.setAttribute("aria-hidden","true");card.inert=true;
+    const header=make("div","zr-dock-header"),title=make("span","zr-dock-title"),actions=make("div","zr-dock-header-actions");
+    title.textContent="Recent downloads";
+    const all=action("All downloads","zr-dock-all",()=>openDock(true));
+    const close=action("×","zr-dock-close",()=>closeCard());close.setAttribute("aria-label","Close recent downloads");
+    actions.append(all,close);header.append(title,actions);
+    cardList=make("div","zr-dock-list");cardList.setAttribute("role","list");
+    cardEmpty=make("div","zr-dock-empty");cardEmpty.textContent="No downloads yet";
+    cardNotice=make("div","zr-dock-notice");cardNotice.setAttribute("role","status");
+    card.append(header,cardList,cardEmpty,cardNotice);
+    card.addEventListener("click",e=>{if(!e.target.closest?.("button"))openDock(true);});
+    card.addEventListener("pointerenter",cancelHide);
+    card.addEventListener("pointerleave",()=>armHide());
+    card.addEventListener("focusin",cancelHide);
+    card.addEventListener("focusout",e=>{if(!card?.contains(e.relatedTarget))armHide(true);});
+    root.append(card);
     buildDock();
     resizeObserver=typeof ResizeObserver==="function"?new ResizeObserver(scheduleMount):null;
     mount();
@@ -387,15 +396,21 @@
     if(!dock||dead)return;
     dockFromCard=fromCard&&cardOpen;
     cancelFlight();
+    dock.setAttribute("data-preparing","true");
     if(dockFromCard)card.setAttribute("data-handoff","true");
     closeCard();dockOpen=true;limit=30;dockNotice.textContent="";setConfirm(false);syncTheme(dock);updateLive();
     renderDock();positionOverlays();
     // Commit the closed seed geometry before the open transition.
-    if(!dock.hasAttribute("data-open"))void dock.offsetWidth;
+    void dock.offsetWidth;void window.getComputedStyle(dock).clipPath;
+    dock.removeAttribute("data-preparing");
     dock.inert=false;dock.setAttribute("aria-hidden","false");
     dock.setAttribute("data-open","true");dockBackdrop.setAttribute("data-open","true");
     node.setAttribute("aria-expanded","true");follow(800);
     dock.querySelector(".zr-dock-close")?.focus({preventScroll:true});
+  }
+  function showActionError(message){
+    const notice=dockOpen?dockNotice:cardOpen?cardNotice:null;
+    if(notice)notice.textContent=message;
   }
   function makeRow(download){
     const el=make("div","zr-dock-row");el.setAttribute("role","listitem");
@@ -409,7 +424,7 @@
       try{
         if(!download.succeeded||download.target?.exists===false||typeof download.launch!=="function")return;
         await download.launch();
-      }catch{if(dockNotice&&dockOpen)dockNotice.textContent="Could not open the downloaded file.";}
+      }catch{showActionError("Could not open the downloaded file.");}
     });
     const folder=action("Show in folder","zr-dock-folder",async()=>{
       // Gecko owns path resolution and platform file-manager integration.
@@ -417,7 +432,7 @@
       try{
         if(!download.succeeded||typeof download.showContainingDirectory!=="function")return;
         await download.showContainingDirectory();
-      }catch{if(dockNotice&&dockOpen)dockNotice.textContent="Could not open the containing folder.";}
+      }catch{showActionError("Could not open the containing folder.");}
     });
     body.append(name,meta,stats,track);actions.append(open,folder);el.append(glyph,body,actions);
     return {el,name,meta,stats,track,fill,open,folder};
@@ -441,13 +456,25 @@
       });
     }
     const entries=historyOrder;
-    const wanted=entries.slice(0,limit),keep=new Set(wanted);
-    for(const [d,row] of rows)if(!keep.has(d)){row.el.remove();rows.delete(d);}
+    renderRows(dockList,rows,entries.slice(0,limit));
+    dockEmpty.hidden=entries.length>0;dockMore.hidden=entries.length<=limit;
+    clearButton.disabled=clearing||![...history.keys()].some(CLEARABLE);
+  }
+  function renderRecent(){
+    if(!cardOpen||!cardList)return;
+    if(!recentOrder)recentOrder=[...history.keys()].reverse().sort((a,b)=>history.get(b).time-history.get(a).time).slice(0,RECENT_LIMIT);
+    renderRows(cardList,recentRows,recentOrder);
+    cardEmpty.hidden=recentOrder.length>0;
+  }
+  function renderRows(container,rowCache,wanted){
+    const keep=new Set(wanted);
+    for(const [d,row] of rowCache)if(!keep.has(d)){row.el.remove();rowCache.delete(d);}
+    const showStats=prefs.getBoolPref(STATS_PREF,true);
     let index=0;
     for(const d of wanted){
       const v=history.get(d);
-      let row=rows.get(d);
-      if(!row){row=makeRow(d);rows.set(d,row);}
+      let row=rowCache.get(d);
+      if(!row){row=makeRow(d);rowCache.set(d,row);}
       const text=v.active?sizeText(v.bytes)+(v.known?" / "+sizeText(v.total):"")+" · "+speedText(v.speed):
         v.success?"Complete · "+sizeText(v.total||v.bytes):v.failed?"Failed":"Stopped";
       if(row.name.textContent!==v.name)row.name.textContent=v.name;
@@ -462,24 +489,26 @@
       row.folder.disabled=!v.success||typeof d.showContainingDirectory!=="function";
       row.open.hidden=!v.success;
       row.open.disabled=!v.success||d.target?.exists===false||typeof d.launch!=="function";
-      const statistics=prefs.getBoolPref(STATS_PREF,true)&&v.success&&v.duration>0;
+      const statistics=showStats&&v.success&&v.duration>0;
       row.stats.hidden=!statistics;
       if(statistics){
         const statsText="Avg. "+speedText((v.total||v.bytes)*1000/v.duration)+" · "+durationText(v.duration);
         if(row.stats.textContent!==statsText)row.stats.textContent=statsText;
         row.stats.title="Average over elapsed time, including pauses";
       }
-      if(dockList.children[index]!==row.el)dockList.insertBefore(row.el,dockList.children[index]||null);
+      if(container.children[index]!==row.el)container.insertBefore(row.el,container.children[index]||null);
       index++;
     }
-    dockEmpty.hidden=entries.length>0;dockMore.hidden=entries.length<=limit;
-    clearButton.disabled=clearing||![...history.keys()].some(CLEARABLE);
   }
   function cancelHide(){if(hideTimer)window.clearTimeout(hideTimer);hideTimer=0;}
+  function armHide(ignoreFocus=false){
+    cancelHide();if(!cardOpen||card?.matches(":hover")||(!ignoreFocus&&card?.contains(document.activeElement)))return;
+    hideTimer=window.setTimeout(closeCard,HOLD);
+  }
   function onKey(e){if(e.key==="Escape"){if(dockOpen&&confirming&&!clearing)setConfirm(false,true);else if(dockOpen)closeDock(true);else if(cardOpen)closeCard();}}
   function closeCard(){
     cancelHide();if(cardOpen){overlayUntil=current()+520;follow(520);}cardOpen=false;card?.removeAttribute("data-open");
-    card?.setAttribute("aria-hidden","true");if(card)card.tabIndex=-1;
+    card?.setAttribute("aria-hidden","true");if(card)card.inert=true;
     node?.setAttribute("aria-expanded",String(dockOpen));
     updateLive();
   }
@@ -487,11 +516,17 @@
   function openCard(){
     if(!card||!node||dead)return;
     if(dockOpen)return;
-    cancelHide();card.removeAttribute("data-handoff");cardOpen=true;syncTheme(card);updateLive();positionOverlays();follow(800);
-    if(!card.hasAttribute("data-open"))void card.offsetWidth;
-    card.setAttribute("data-open","true");card.setAttribute("aria-hidden","false");card.tabIndex=0;
-    node.setAttribute("aria-expanded","true");
-    hideTimer=window.setTimeout(closeCard,HOLD);
+    cancelHide();
+    const entering=!cardOpen;
+    if(entering){card.setAttribute("data-preparing","true");card.removeAttribute("data-handoff");}
+    cardOpen=true;cardNotice.textContent="";syncTheme(card);updateLive();renderRecent();positionOverlays();
+    if(entering){
+      // Commit the actual icon-sized seed without a transition from old geometry.
+      void card.offsetWidth;void window.getComputedStyle(card).clipPath;
+      card.removeAttribute("data-preparing");
+    }
+    card.setAttribute("data-open","true");card.setAttribute("aria-hidden","false");card.inert=false;
+    node.setAttribute("aria-expanded","true");follow(800);armHide();
   }
   function cancelFlight(){
     ++flightToken;
@@ -535,24 +570,15 @@
   function paint(){
     updateTimer=0;if(dead||!node)return;
     lastRender=current();snapshot=summarize(batch.values());const s=snapshot;
-    const details=(latest&&batch.get(latest))||[...batch.values()].find(x=>x.active)||[...batch.values()].at(-1);
-    node.setAttribute("data-state",s.state);card.setAttribute("data-state",s.state);
+    node.setAttribute("data-state",s.state);
     updateLive();
     node.toggleAttribute("data-transferring",s.active>0);
-    const unknown=s.state==="active"&&s.progress===null;
-    node.toggleAttribute("data-indeterminate",unknown);card.toggleAttribute("data-indeterminate",unknown);
-    for(const f of [fill,cardFill]){
-      if(s.progress!==null)f.style.setProperty("--zr-download-progress",String(s.progress));
-      else f.style.removeProperty("--zr-download-progress");
-    }
-    const a=s.state==="active"?speedText(s.speed):s.state==="complete"?"Complete":s.state==="failed"?"Failed":s.state==="stopped"?"Stopped":"";
-    const b=s.state==="active"?(s.progress===null?"Downloading":Math.floor(s.progress*100)+"%"):s.state==="complete"?"100%":"";
-    let bytes=0,total=0,known=true;
-    for(const v of batch.values())if(v.active||v.success){bytes+=v.success&&v.known?v.total:v.bytes;total+=v.total;if(!v.known)known=false;}
-    const values=[[speed,s.active?speedText(s.speed):""],[cardSpeed,a],[cardStatus,b],
-      [cardName,s.active>1?s.active+" downloads":details?.name||"Downloads"],
-      [cardBytes,details?(sizeText(bytes)+(known&&total>0?" / "+sizeText(total):"")):"No active downloads"]];
-    for(const [n,v] of values)if(n.textContent!==v)n.textContent=v;
+    node.toggleAttribute("data-indeterminate",s.state==="active"&&s.progress===null);
+    if(s.progress!==null)setVar(fill,"--zr-download-progress",String(s.progress));
+    else fill.style.removeProperty("--zr-download-progress");
+    const text=s.active?speedText(s.speed):"";
+    if(speed.textContent!==text)speed.textContent=text;
+    if(cardOpen)renderRecent();
     if(dockOpen)renderDock();
     // No geometry reads on ordinary transfer updates.
   }
@@ -572,6 +598,7 @@
       const elapsed=Date.now()-next.time;
       if(elapsed>0)next.duration=elapsed;
     }
+    if(!old||old.time!==next.time)recentOrder=null;
     if(!old||old.active!==next.active||old.time!==next.time||sortKey==="size"&&sortBytes(old)!==sortBytes(next))historyOrder=null;
     history.set(d,next);
     if(next.active){
@@ -588,10 +615,10 @@
     else if(!hydrating&&!previous&&(next.success||next.failed)&&fresh.has(d)){
       if(![...batch.values()].some(x=>x.active))batch.clear();
       batch.set(d,next);latest=d;schedule(true);launchFlight();
-    }else if(dockOpen)schedule();
+    }else if(dockOpen||cardOpen)schedule();
   }
   function added(d){if(!hydrating)fresh.add(d);changed(d);}
-  function removed(d){if(history.delete(d))historyOrder=null;if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen)schedule();}
+  function removed(d){if(history.delete(d)){historyOrder=null;recentOrder=null;}if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen||cardOpen)schedule();}
   function teardown(){
     ++epoch;
     if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();closeCard();closeDock();stopFollow();overlayUntil=0;
@@ -606,8 +633,8 @@
     window.removeEventListener("pointerdown",trackClick,true);window.removeEventListener("pointerdown",outsideDock,true);window.removeEventListener("keydown",onKey,true);
     try{prefs.removeObserver(SIDE,scheduleMount);}catch{}
     try{prefs.removeObserver(STATS_PREF,refreshStatistics);}catch{}
-    node?.remove();card?.remove();node=fill=speed=icon=card=cardFill=cardName=cardSpeed=cardStatus=cardBytes=cardIcon=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
-    dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();historyOrder=null;limit=30;cardHeight=82;dockHeight=0;dockFromCard=false;
+    node?.remove();card?.remove();node=fill=speed=icon=card=cardList=cardEmpty=cardNotice=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
+    dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();recentRows.clear();historyOrder=recentOrder=null;limit=30;cardHeight=0;dockHeight=0;dockFromCard=false;
     sortKey="time";sortDir=-1;headerNormal=headerConfirm=clearButton=sortTime=sortSize=yesButton=noButton=null;confirming=clearing=false;
     snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"});
     root.removeAttribute(ACTIVE);root.removeAttribute("data-zr-downloads-native");lastDockRect=null;
