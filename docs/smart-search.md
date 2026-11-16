@@ -35,3 +35,7 @@ Current workspace/Essentials retain priority during candidate selection, but the
 ## Preview.22 — first-open recommendations
 
 Preview.21 user testing confirmed both columns, timeline and OnePlane layout, but cold startup showed only Recent tabs until reopening search. The previous recovery incorrectly stopped at the first recent result. Count native recommendations separately, listen for `topsites-refreshed` / `newtab-top-sites-changed`, and retry the focused eligible zero-prefix search with bounded delays (180/500/1000/1800ms, readiness event can expedite). Stop on successful groups, disabled Top Sites with recent results, user navigation, close, typing or exhaustion. Native results remain native; no synthetic history results or preference changes. Live cold-start confirmation pending.
+
+## Preview.23
+
+Timeline travel duration is 850ms per column (2.5× slower), with an 850ms delay on the second column. Easing, rails, reduced-motion behavior and native search logic are unchanged.

@@ -450,9 +450,9 @@
   background-position:center bottom,center;opacity:.43;pointer-events:none;z-index:2;
 }
 #urlbar-results[data-zr-timeline] > .urlbarView-row[data-zr-rail]::after {
-  animation:zr-smart-dot-travel 340ms cubic-bezier(.3,.05,.3,1) both;
+  animation:zr-smart-dot-travel 850ms cubic-bezier(.3,.05,.3,1) both;
 }
-#urlbar-results[data-zr-timeline] > .urlbarView-row[data-zr-rail][data-zr-column="2"]::after {animation-delay:340ms;}
+#urlbar-results[data-zr-timeline] > .urlbarView-row[data-zr-rail][data-zr-column="2"]::after {animation-delay:850ms;}
 @keyframes zr-smart-dot-travel {
   0% {background-position:center top,center;opacity:0;}
   12% {opacity:.65;}

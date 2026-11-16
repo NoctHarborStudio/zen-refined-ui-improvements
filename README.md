@@ -2,7 +2,7 @@
 
 A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
-**Current development preview: `0.6.0-preview.22`** · Target: Zen 1.24.2b / Sine 2.3.3.
+**Current development preview: `0.6.0-preview.23`** · Target: Zen 1.24.2b / Sine 2.3.3.
 
 > Preview software. Core features have been tested by the maintainer/user in Zen; compatibility across operating systems, themes and configurations is not guaranteed. Install in a test profile first.
 

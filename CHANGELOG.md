@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.23
+
+- Slow the Smart Search timeline dot travel by 2.5×: 850ms per column instead of 340ms, preserving sequential timing, existing easing, layout and reduced-motion behavior. No search logic changes.
+
 ## 0.6.0-preview.22
 
 - Fix Smart Search startup recovery prematurely completing when Recent tabs were present but native Recommended results were absent. Track both groups separately; react to native Top Sites readiness notifications and allow up to four coalesced startup refreshes while the eligible search remains focused. Do not reopen a dismissed view or disrupt typing/result navigation. No CSS or animation changes.
