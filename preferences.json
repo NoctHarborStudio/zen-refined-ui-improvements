@@ -140,11 +140,5 @@
     "property": "zen.refined.page-progress.enabled",
     "label": "Page loading indicator",
     "defaultValue": true
-  },
-  {
-    "type": "checkbox",
-    "property": "zen.refined.page-progress.percent",
-    "label": "Show estimated page loading percentage",
-    "defaultValue": false
   }
 ]

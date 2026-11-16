@@ -2,11 +2,11 @@
  * Estimates are never presented as exact page completion percentages. */
 (() => {
   const root=document.documentElement,prefs=Services.prefs;
-  const PREF="zen.refined.page-progress.enabled",PERCENT="zen.refined.page-progress.percent",KEY="__zenRefinedPageProgress";
+  const PREF="zen.refined.page-progress.enabled",KEY="__zenRefinedPageProgress";
   const NS="http://www.w3.org/1999/xhtml",F=Ci.nsIWebProgressListener;
   if(root.hasAttribute("popup-window")||typeof window.addUnloadListener!=="function")return;
   window[KEY]?.();
-  let dead=false,installed=false,initialized=false,observer=null,bar=null,fill=null,label=null;
+  let dead=false,installed=false,initialized=false,observer=null,bar=null,fill=null;
   let browser=null,states=new WeakMap(),selected=null,shown=false,showTimer=0,hideTimer=0,renderTimer=0,lastRender=0;
   const now=()=>window.performance.now();
   const enabled=()=>prefs.getBoolPref(PREF,true);
@@ -18,7 +18,6 @@
   function hide(){
     clearTimers();shown=false;bar?.removeAttribute("data-visible");
     bar?.removeAttribute("data-indeterminate");bar?.removeAttribute("data-terminal");
-    if(label)label.textContent="";
   }
   function state(b){
     let s=states.get(b);
@@ -31,13 +30,11 @@
     const s=selectedState();if(!s?.active)return;
     lastRender=now();
     bar.toggleAttribute("data-indeterminate",s.progress===null);
-    if(s.progress!==null)fill.style.setProperty("--zr-page-progress",String(s.progress));
-    const value=prefs.getBoolPref(PERCENT,false)&&s.progress!==null?"≈"+Math.floor(s.progress*100)+"%":"";
-    if(label.textContent!==value)label.textContent=value;
+    fill.style.setProperty("--zr-page-progress",String(s.progress??.16));
   }
   function schedule(){
     if(!shown||renderTimer)return;
-    renderTimer=window.setTimeout(paint,Math.max(0,100-(now()-lastRender)));
+    renderTimer=window.setTimeout(paint,Math.max(0,120-(now()-lastRender)));
   }
   function reveal(){
     if(showTimer||shown||!bar)return;
@@ -75,8 +72,7 @@
         if(successful(status)){
           bar.removeAttribute("data-indeterminate");bar.setAttribute("data-terminal","true");
           fill.style.setProperty("--zr-page-progress","1");
-          if(prefs.getBoolPref(PERCENT,false))label.textContent=""; // only estimates while loading
-          hideTimer=window.setTimeout(hide,360);
+          hideTimer=window.setTimeout(hide,570);
         }else hide(); // canceled/error: never claim completion
       }
     },
@@ -92,7 +88,7 @@
     if(installed||dead||!enabled()||!window.gBrowser?.addTabsProgressListener)return;
     browser=window.gBrowser;
     bar=make("div","zr-page-progress");bar.id="zr-page-progress";bar.setAttribute("aria-hidden","true");
-    fill=make("div","zr-page-progress-fill");label=make("span","zr-page-progress-label");bar.append(fill,label);root.append(bar);
+    fill=make("div","zr-page-progress-fill");bar.append(fill);root.append(bar);
     installed=true;
     try{
       browser.addTabsProgressListener(listener);
@@ -106,20 +102,19 @@
       try{browser.removeTabsProgressListener(listener);}catch{}
       browser?.tabContainer?.removeEventListener("TabSelect",onSelect);
     }
-    installed=false;bar?.remove();bar=fill=label=null;browser=selected=null;states=new WeakMap();
+    installed=false;bar?.remove();bar=fill=null;browser=selected=null;states=new WeakMap();
   }
   function sync(){if(!initialized||dead)return;if(enabled())install();else uninstall();}
-  function percentChanged(){if(installed)paint();}
   function dispose(){
     if(dead)return;dead=true;uninstall();
     if(observer)try{Services.obs.removeObserver(observer,"browser-delayed-startup-finished");}catch{}
     observer=null;
-    try{prefs.removeObserver(PREF,sync);prefs.removeObserver(PERCENT,percentChanged);}catch{}
+    try{prefs.removeObserver(PREF,sync);}catch{}
     window.removeEventListener("unload",dispose);if(window[KEY]===dispose)delete window[KEY];
   }
   function start(){initialized=true;sync();}
   window[KEY]=dispose;window.addUnloadListener(dispose);window.addEventListener("unload",dispose,{once:true});
-  prefs.addObserver(PREF,sync);prefs.addObserver(PERCENT,percentChanged);
+  prefs.addObserver(PREF,sync);
   if(window.gBrowserInit?.delayedStartupFinished)start();
   else{observer=subject=>{if(subject!==window)return;Services.obs.removeObserver(observer,"browser-delayed-startup-finished");observer=null;start();};Services.obs.addObserver(observer,"browser-delayed-startup-finished");}
 })();

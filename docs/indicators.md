@@ -1,22 +1,20 @@
 # Indicators — architecture and implementation pipeline
 
-## Ownership
+## Ownership and placement
 
-- Zen Refined owns native downloads state and the card; it never manages OnePlane's tab layout. OnePlane may supply a connected chrome host (future lower-left Extension Dock) using `window.__zenRefinedDownloadIndicator.setHost(element)`, release via `setHost(null)`, or an element with id `oneplane-download-indicator-slot` and event `OnePlane:DownloadHostChanged`. The native view is moved, not cloned. `getSnapshot()` returns aggregate state only, without filenames or URLs.
-- Standalone fallback: fixed upper-right card below window controls; right-to-left entrance and fill, speed on left, icon on right. OnePlane fallback: fixed upper-left, until its own dock is implemented. No layout reservation in either fallback.
-- Page indicator belongs entirely to Zen Refined; no dependency on OnePlane. Fixed top-edge center-to-right decorative bar.
+- Zen Refined owns Downloads state, native dock icon, transient detail card and one-shot flight. OnePlane may supply a connected chrome host via `window.__zenRefinedDownloadIndicator.setHost(element)`, release with `setHost(null)`, or expose `#oneplane-download-indicator-slot` and dispatch `OnePlane:DownloadHostChanged`. Same node, no duplicate data subscription. `getSnapshot()` exposes aggregate state only, not names/paths.
+- Native Zen: find the actual sidebar group containing the menu or Library (top/bottom/foot buttons), insert before the group, outside CustomizableUI's widget list. Follow sidebar side preference. When sidebar is hidden, use a small fixed edge fallback while transfer/result exists. OnePlane's left fallback remains until its own dock exists. No changes to native controls.
+- Card is a root-level overlay, anchored inward from icon with 14px separation and viewport clamping. Colors inherit toolbar/arrowpanel theme tokens. Icon persists in native dock even when idle; speed and progress are shown during transfer/result. Click icon to toggle card, click card to open native Library or Downloads.
+- Flight: one bounded 620ms WAAPI animation using sampled click and icon coordinates; no per-frame JavaScript, no flight for restored history or unfocused windows. Reduced motion skips flight. Card retracts after 3000ms; transfer updates never restart timer.
 
 ## Data and render pipeline
 
-1. Native delayed startup → register one privacy-appropriate Downloads list view per window. Initial completed history does not animate.
-2. Native add/change/remove → update only active batch records → coalesce ordinary visual updates to at most 5 Hz. State changes render immediately. Real total/current bytes, combined speed, unknown-size state; no synthetic transfer progress.
-3. CSS animates opacity/transform of the card and empty fill; no per-frame JS, no progress-triggered DOM geometry reads, no polling, no new network activity. Native confusing Zen flight is visually suppressed only while the module is installed. Its internal listener may still execute; no global preference is changed.
-4. Page uses one gBrowser tabs-progress listener, WeakMap per browser, selected-tab-only view. Top-level network start/stop gates the bar; actual known total-byte estimates update at most 10 Hz. Unknown totals use CSS pulse. Delay 90ms avoids flashing on instant loads; success completes and hides; failure/cancel hides without completion. Optional estimated percentage is marked approximately. No fabricated exact page load percentage.
-5. Settings/unload invalidate async installation and remove listeners, observers, timers and nodes. No persistent state except Sine preferences. No page scripts, screenshots or session changes.
+1. One native privacy-specific Downloads list view per window. Initial history ignored; active transfers restored quietly.
+2. Native events update active batch, filenames from basename only (never send/store paths), actual bytes, total speed and aggregate known progress. Coalesced ordinary visual updates at most 5 Hz. No polling or geometry reads on progress. Layout work only for structural/side changes, card open and flight start. Temporary native flight is visually suppressed; native underlying listener may still execute.
+3. Page indicator: one tabs-progress listener, WeakMap state per browser; selected tab only. Top-level network events, known byte estimates at most ~8 Hz, unknown totals use fixed partial line with soft opacity pulse. CSS scales one line from center toward both sides; no percentage label. Success extends to full and fades; errors/cancel hide without fake completion. No screenshot or page injection.
+4. Disable/unload invalidates async installs and removes DOM, event listeners, observers, flight and timers. No persistent download metadata.
 
 ## Next stages
 
-- Test in real Zen, refine sizes/positions and transition timing from user feedback.
-- OnePlane Extension Dock integration after its layout is ready; use the host contract rather than a duplicate Downloads subscription.
-- Consider native Library UI refinements separately; no redesign or close animation in this milestone.
-- Profile actual Zen with active transfers and many tabs if frame pacing is poor. Avoid speculative optimization that changes accepted visual design.
+- Real Zen visual test: verify native anchor selection, sidebar hide/show, mirroring, theme colors, long filenames, flight landing, card clearance and timing. Profile if needed.
+- OnePlane Extension Dock supplies host later; native Library redesign deferred.

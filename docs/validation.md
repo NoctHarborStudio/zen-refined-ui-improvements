@@ -96,3 +96,10 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] With OnePlane active, temporary left fallback; later dock host can reparent the same card. Toggle OnePlane, Compact Mode, settings, resize, unload. Native Library stays unchanged.
 - [ ] Page loads: slow, fast, cached, redirects, error/abort, selected/background tab switching, SPA navigation, split view; no false 100% on canceled requests. Unknown length pulse; estimated percentage optional. Line is click-through and independent of toolbar visibility.
 - [ ] Verify actual frame pacing, no repeated JS timers while idle, no progress-driven layout reads, listeners and observers removed on disable/unload.
+
+## 0.6.0-preview.2 — dock indicator and symmetrical progress
+
+- [ ] Native Zen sidebar on left/right, actual top/bottom menu group, expanded/collapsed/Compact Mode; dock icon above native controls, no overlap. Check theme tokens in light/dark/custom gradients.
+- [ ] Start download from a real click: 620ms curved flight lands on dock icon, detail card opens inward with clearance, 3000ms hold then retracts. Clicking icon reopens; card opens native downloads. Very fast files, multiple downloads, cancellation, unknown total, private windows, history replay and reduced motion.
+- [ ] OnePlane fallback and host contract; resize, side preference, hot reload/unload, no duplicate nodes/listeners. Verify no progress-triggered geometry reads.
+- [ ] Page bar grows from center symmetrically; slower interpolation, unknown opacity pulse, no percentage, success/cancel and tab switching.

@@ -27,9 +27,9 @@ Optional one-shot browser-chrome startup reveal, enabled by default (1050 ms; th
 
 ## Download indicator and Page Progress
 
-Two independent native-event modules. The download indicator replaces the confusing visible Zen flight with a compact right-to-left entrance, actual transfer speed and byte-weighted progress (or an unknown-length motion), with a right-side icon opening native Downloads/Library. It stays independent of Compact Mode and does not change the native download list or global download preferences. In OnePlane the temporary fallback is on the left; its future Extension Dock can host the same element via `window.__zenRefinedDownloadIndicator.setHost(element)` or `#oneplane-download-indicator-slot`, without duplicating transfer logic. The native Library design is untouched.
+The native sidebar download icon follows Zen's actual menu/Library group and the configured sidebar side. Speed is above the icon and progress below it. A short curved flight lands at the icon, opens a theme-colored card with filename, real transferred bytes, speed and progress for three seconds, then retracts. The icon reopens details; the card opens native Library/Downloads. If native sidebar is hidden, an edge fallback is available. OnePlane retains its temporary left fallback and optional host contract for its future Extension Dock; no native Library redesign or OnePlane edits.
 
-Page Progress is a thin neutral line at the top, growing from the viewport center toward the right. It follows the selected tab's top-level network events, hides after completion, and uses an indeterminate CSS pulse when total bytes are unavailable. Optional approximate percentages (off by default) are not whole-site completion guarantees. Both features are individually configurable, respect reduced motion and remove listeners/styles on unload. See [indicator architecture](docs/indicators.md).
+Page Progress is a thin neutral gray line expanding symmetrically from the top center, with smooth CSS interpolation, a soft unknown-progress pulse and no percentages. Both modules use native events, bounded timers, independent settings and unload cleanup. See [indicator architecture](docs/indicators.md).
 
 ## Planned improvements / known issues
 

@@ -13,8 +13,8 @@ Baseline: `0.5.0-preview.2`. Zen Refined owns general browser UI improvements. O
 
 ## In development — 0.6.0-preview.1
 
-- Download Indicator: standalone right-side prototype, left-side OnePlane fallback, optional future Extension Dock host. Native Downloads data and click-through; Library redesign deferred.
-- Page Progress: top center-to-right gray line, optional approximate percentage. Validate actual Zen loading and tab switching before accepting.
+- Download Indicator: native sidebar icon + three-second detail card, mirrored placement and left-side OnePlane fallback, optional future Extension Dock host. Native Downloads data and click-through; Library redesign deferred.
+- Page Progress: top center-out gray line, no percentage. Validate actual Zen loading and tab switching before accepting.
 - Integration pipeline: Zen Refined owns data/rendering; OnePlane will own the final Extension Dock placement. No new OnePlane dependency or duplicate listener.
 
 ## Backlog
