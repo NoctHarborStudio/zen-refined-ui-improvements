@@ -144,3 +144,9 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 
 - [ ] Native right/left sidebar, shown/hidden Compact Mode, manual and automatic entry: first visible motion emerges as a growing point at the boundary, no floating strip or square cut-off gap. Close reverses to the same point.
 - [ ] Full/recent modes, sidebar moving during entry, interruption, reduced motion, OnePlane host/fallback, narrow widths and light/dark theme: unchanged resting geometry, correct mask and user-origin hold. Confirm real Gecko painting outside the resting dock box.
+
+## 0.6.0-preview.17 — Smart Search
+
+- [ ] Native Zen and OnePlane: Ctrl+T/empty URL bar shows MRU before native suggestions, arrow/Enter and click switch the exact tab, identical URLs/containers remain distinct. No new duplicate tab navigation.
+- [ ] Current space, Essentials, other spaces, lazy/unloaded, pinned/folders/split, closed/moved/navigated targets, private and multiple windows, native open-tab suggestions disabled, typed search/explicit search mode, Sine unload/reload and preference changes.
+- [ ] Check actual provider priority, row rendering, native keyboard selection, workspace transition, no network preloading and no duplicate provider after multiple window lifecycles.

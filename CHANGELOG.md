@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0-preview.17
+
+- First Smart Search preview: native empty-query recent-tab results, current-workspace preference, exact tab identity switching, configurable maximum, native suggestion slots reserved. Private windows and typed queries are excluded; no persistent MRU database.
+- Preserve preview.16 Downloads geometry and all prior modules. Actual Zen / OnePlane integration testing pending.
+
 ## 0.6.0-preview.16
 
 - Downloads wave now starts from a subpixel dot at the sidebar boundary, growing into a narrow connected stream. Its animated border box spans the gap; the outer mask no longer clips away an unpainted bridge. Closing reverses the same geometry, and the final resting gap is preserved.

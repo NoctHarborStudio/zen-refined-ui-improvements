@@ -370,3 +370,20 @@
 
 @media(prefers-reduced-motion:reduce) { #zr-download-dock:is([data-entering],[data-closing]) > * { animation:none !important; } }
 
+
+
+/* Smart Search rows are native selectable URL-bar results. */
+.urlbarView-row[dynamicType="zr-recent-tab"] .urlbarView-dynamic-zr-recent-tab-detail,
+.urlbarView-dynamic-zr-recent-tab-detail {
+  min-width:0;
+  flex:0 1 auto;
+  margin-inline-start:8px;
+  opacity:.72;
+}
+.urlbarView-dynamic-zr-recent-tab-action {
+  margin-inline-start:auto;
+  flex-shrink:0;
+}
+.urlbarView-dynamic-zr-recent-tab-title {
+  min-width:0;
+}
