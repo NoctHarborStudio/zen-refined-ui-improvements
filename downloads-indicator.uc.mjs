@@ -20,13 +20,15 @@
   let dock=null,dockList=null,dockEmpty=null,dockMore=null,dockBackdrop=null,dockNotice=null,dockOpen=false,limit=30;
   const history=new Map(),rows=new Map();
   let historyOrder=null,cardHeight=82,dockHeight=0;
+  let sortKey="time",sortDir=-1,headerNormal=null,headerConfirm=null,clearButton=null,sortTime=null,sortSize=null,yesButton=null,noButton=null,confirming=false,clearing=false;
+  const CLEARABLE=d=>d.stopped&&!d.hasPartialData&&!d.hasBlockedData;
   let lastRender=0,snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"}),batch=new Map(),fresh=new WeakSet();
   const number=x=>Number.isFinite(x)?Math.max(0,x):0;
   const current=()=>window.performance.now();
   function sample(d){
     return {active:!d.stopped&&!d.succeeded&&!d.error&&!d.canceled,success:!!d.succeeded,
       failed:!!d.error,canceled:!!d.canceled,known:!!d.hasProgress&&number(d.totalBytes)>0,
-      total:number(d.totalBytes),bytes:number(d.currentBytes),speed:number(d.speed),
+      total:number(d.totalBytes),bytes:number(d.currentBytes),speed:number(d.speed),time:number(Number(d.startTime)),
       name:String(d.target?.path||"").split(/[\\\\/]/).pop()||"Download"};
   }
   function summarize(entries){
@@ -50,6 +52,21 @@
     return (i&&v<100?v.toFixed(1):Math.round(v))+" "+units[i]+(rate?"/s":"");
   }
   function speedText(v){return sizeText(v,true);}
+  function sortBytes(v){return v.known?v.total:v.success?v.bytes:null;}
+  function syncTheme(...targets){
+    // Sample only on structural changes / opening, never on byte updates.
+    // Zen stores actual compact palette on the toolbox; root overlays do
+    // not inherit these local values. Copy the resolved theme tokens.
+    const source=observedSidebar||get("navigator-toolbox")||root;
+    const st=window.getComputedStyle(source);
+    for(const n of targets){if(!n)continue;
+      for(const [key,native] of [["--zr-native-surface","--zen-compact-mode-toolbar-background"],["--zr-native-outline","--zen-compact-mode-toolbar-outline-color"],["--zr-native-row","--zen-toolbar-element-bg"]]){
+        const value=st.getPropertyValue(native).trim();
+        if(value)n.style.setProperty(key,value);else n.style.removeProperty(key);
+      }
+      if(st.color)n.style.setProperty("--zr-native-fg",st.color);
+    }
+  }
   function openDownloads(){openDock();}
   function visible(n){
     if(!n?.isConnected||n.hidden||n.collapsed)return false;
@@ -179,7 +196,7 @@
     // uses the floating fallback. A hidden native sidebar never reparents.
     node.toggleAttribute("data-fallback",!slot&&!native);
     root.toggleAttribute("data-zr-downloads-native",native);
-    if(changed||(oldSide&&oldSide!==side()))lastDockRect=null;
+    if(changed||(oldSide&&oldSide!==side())){lastDockRect=null;syncTheme(node,card,dock); }
     if(toolbox!==observedSidebar){
       resizeObserver?.disconnect();observedSidebar=toolbox;if(toolbox)resizeObserver?.observe(toolbox);
       if(card)resizeObserver?.observe(card);if(dock)resizeObserver?.observe(dock);
@@ -256,13 +273,67 @@
     dock.setAttribute("role","dialog");dock.setAttribute("aria-label","Downloads");dock.setAttribute("aria-hidden","true");dock.inert=true;
     const header=make("div","zr-dock-header"),title=make("span","zr-dock-title");
     title.textContent="Downloads";
+    headerNormal=make("div","zr-dock-header-normal");headerConfirm=make("div","zr-dock-header-confirm");headerConfirm.hidden=true;
+    const actions=make("div","zr-dock-header-actions");
+    clearButton=action("Clear","zr-dock-clear",()=>setConfirm(true));clearButton.disabled=true;
     const close=action("×","zr-dock-close",()=>closeDock(true));close.setAttribute("aria-label","Close downloads");
-    header.append(title,close);
+    actions.append(clearButton,close);headerNormal.append(title,actions);
+    yesButton=action("Yes","zr-dock-yes",()=>void clearHistory());
+    noButton=action("No","zr-dock-no",()=>setConfirm(false,true));
+    const question=make("span","zr-dock-question");question.textContent="Clear downloads?";
+    question.setAttribute("title","Remove finished entries only. Files on disk are kept.");
+    headerConfirm.append(yesButton,question,noButton);header.append(headerNormal,headerConfirm);
+    const sort=make("div","zr-dock-sort");
+    sortTime=action("Time ↓","zr-dock-sort-time",()=>changeSort("time"));
+    sortSize=action("Size","zr-dock-sort-size",()=>changeSort("size"));sort.append(sortTime,sortSize);
     dockList=make("div","zr-dock-list");dockList.setAttribute("role","list");
     dockEmpty=make("div","zr-dock-empty");dockEmpty.textContent="No downloads yet";
     dockNotice=make("div","zr-dock-notice");dockNotice.setAttribute("role","status");
     dockMore=action("Show more","zr-dock-more",()=>{limit+=30;renderDock();positionOverlays();});
-    dock.append(header,dockList,dockEmpty,dockMore,dockNotice);root.append(dockBackdrop,dock);
+    dock.append(header,sort,dockList,dockEmpty,dockMore,dockNotice);root.append(dockBackdrop,dock);updateSort();
+  }
+  function updateSort(){
+    for(const [button,key,title] of [[sortTime,"time","Time"],[sortSize,"size","Size"]]){
+      if(!button)continue;
+      const active=sortKey===key;
+      button.textContent=title+(active?(sortDir<0?" ↓":" ↑"):"");
+      button.setAttribute("aria-pressed",String(active));
+      button.setAttribute("title",active?(sortDir<0?"Descending — click for ascending":"Ascending — click for descending"):"Sort by "+title.toLowerCase());
+    }
+  }
+  function changeSort(key){
+    if(sortKey===key)sortDir=-sortDir;else{sortKey=key;sortDir=-1;}
+    historyOrder=null;updateSort();renderDock();
+  }
+  function setConfirm(value,restore=false){
+    if(!headerNormal||!headerConfirm)return;
+    if(value&&(clearing||!dockOpen||![...history.keys()].some(CLEARABLE)))return;
+    confirming=value;
+    headerNormal.hidden=value;headerConfirm.hidden=!value;
+    if(value){yesButton.disabled=false;noButton.disabled=false;noButton.focus?.({preventScroll:true});}
+    else if(restore&&dockOpen)clearButton.focus?.({preventScroll:true});
+  }
+  async function clearHistory(){
+    if(!confirming||clearing||!list)return;
+    const source=list,token=epoch;
+    const targets=[...history.keys()].filter(CLEARABLE);
+    clearing=true;yesButton.disabled=true;noButton.disabled=true;
+    let failures=0;
+    try{
+      // Native session list only. No Places deletion, finalize(), file
+      // deletion, cancellation or manipulation of partial/blocked files.
+      for(const d of targets){
+        if(dead||token!==epoch||list!==source)break;
+        if(!CLEARABLE(d)||!history.has(d))continue;
+        try{await source.remove(d);}catch{failures++;}
+      }
+    }finally{
+      if(!dead&&token===epoch&&list===source){
+        clearing=false;setConfirm(false,true);
+        if(dockNotice)dockNotice.textContent=failures?"Some entries could not be cleared.":"";
+        schedule(true);
+      }
+    }
   }
   function outsideDock(e){
     if(!dockOpen)return;
@@ -273,14 +344,14 @@
   function closeDock(restoreFocus=false){
     if(!dock)return;
     if(dockOpen){overlayUntil=current()+520;follow(520);}
-    dockOpen=false;dock.removeAttribute("data-open");dockBackdrop?.removeAttribute("data-open");
+    dockOpen=false;setConfirm(false);dock.removeAttribute("data-open");dockBackdrop?.removeAttribute("data-open");
     dock.inert=true;dock.setAttribute("aria-hidden","true");
     node?.setAttribute("aria-expanded",String(cardOpen));updateLive();
     if(restoreFocus&&visible(node))node.focus?.({preventScroll:true});
   }
   function openDock(){
     if(!dock||dead)return;
-    cancelFlight();closeCard();dockOpen=true;limit=30;dockNotice.textContent="";updateLive();
+    cancelFlight();closeCard();dockOpen=true;limit=30;dockNotice.textContent="";setConfirm(false);syncTheme(dock);updateLive();
     renderDock();positionOverlays();
     dock.inert=false;dock.setAttribute("aria-hidden","false");
     dock.setAttribute("data-open","true");dockBackdrop.setAttribute("data-open","true");
@@ -309,7 +380,17 @@
     // bounded page, active items first, then newest first. Reuse rows.
     if(!historyOrder){
       historyOrder=[...history.keys()].reverse();
-      historyOrder.sort((a,b)=>Number(history.get(b).active)-Number(history.get(a).active));
+      historyOrder.sort((a,b)=>{
+        const av=history.get(a),bv=history.get(b);
+        const active=Number(bv.active)-Number(av.active);if(active)return active;
+        if(sortKey==="size"){
+          const x=sortBytes(av),y=sortBytes(bv);
+          if(x===null||y===null){if(x!==y)return x===null?1:-1;}
+          else if(x!==y)return sortDir*(x-y);
+        }
+        if(av.time!==bv.time)return (sortKey==="time"?sortDir:-1)*(av.time-bv.time);
+        return 0;
+      });
     }
     const entries=historyOrder;
     const wanted=entries.slice(0,limit),keep=new Set(wanted);
@@ -331,9 +412,10 @@
       index++;
     }
     dockEmpty.hidden=entries.length>0;dockMore.hidden=entries.length<=limit;
+    clearButton.disabled=clearing||![...history.keys()].some(CLEARABLE);
   }
   function cancelHide(){if(hideTimer)window.clearTimeout(hideTimer);hideTimer=0;}
-  function onKey(e){if(e.key==="Escape"){if(dockOpen)closeDock(true);else if(cardOpen)closeCard();}}
+  function onKey(e){if(e.key==="Escape"){if(dockOpen&&confirming&&!clearing)setConfirm(false,true);else if(dockOpen)closeDock(true);else if(cardOpen)closeCard();}}
   function closeCard(){
     cancelHide();if(cardOpen){overlayUntil=current()+520;follow(520);}cardOpen=false;card?.removeAttribute("data-open");
     card?.setAttribute("aria-hidden","true");if(card)card.tabIndex=-1;
@@ -344,7 +426,7 @@
   function openCard(){
     if(!card||!node||dead)return;
     if(dockOpen)return;
-    cancelHide();cardOpen=true;updateLive();positionOverlays();follow();
+    cancelHide();cardOpen=true;syncTheme(card);updateLive();positionOverlays();follow();
     card.setAttribute("data-open","true");card.setAttribute("aria-hidden","false");card.tabIndex=0;
     node.setAttribute("aria-expanded","true");
     hideTimer=window.setTimeout(closeCard,HOLD);
@@ -372,19 +454,19 @@
     const token=flightToken;
     flight=make("span","zr-download-flight");flight.setAttribute("aria-hidden","true");
     const glyph=make("span","zr-download-icon");flight.append(glyph);
-    flight.style.setProperty("left",x+"px");flight.style.setProperty("top",y+"px");root.append(flight);
+    flight.style.setProperty("left",x+"px");flight.style.setProperty("top",y+"px");root.append(flight);syncTheme(flight);
     try{
       // A short compositor-friendly curved flight; no frame callbacks,
       // no bouncing, and the card opens only after it reaches the icon.
       const frames=[
-        {transform:"translate(-50%,-50%) scale(.72)",opacity:0,offset:0},
-        {transform:"translate(calc(-50% + "+dx*.16+"px),calc(-50% + "+(dy*.16-arc*.52)+"px)) scale(1)",opacity:1,offset:.22},
-        {transform:"translate(calc(-50% + "+dx*.72+"px),calc(-50% + "+(dy*.72-arc*.62)+"px)) scale(.86)",opacity:1,offset:.72},
+        {transform:"translate(-50%,-50%) scale(.45)",opacity:0,offset:0},
+        {transform:"translate(calc(-50% + "+dx*.12+"px),calc(-50% + "+(dy*.12-arc*.42)+"px)) scale(1)",opacity:1,offset:.26},
+        {transform:"translate(calc(-50% + "+dx*.72+"px),calc(-50% + "+(dy*.72-arc*.62)+"px)) scale(.86)",opacity:1,offset:.73},
         {transform:"translate(calc(-50% + "+dx+"px),calc(-50% + "+dy+"px)) scale(.4)",opacity:.12,offset:1}
       ];
-      flightAnimation=flight.animate(frames,{duration:620,easing:"cubic-bezier(.32,.04,.25,1)",fill:"forwards"});
+      flightAnimation=flight.animate(frames,{duration:780,easing:"cubic-bezier(.32,.04,.25,1)",fill:"forwards"});
       const land=()=>{if(dead||token!==flightToken)return;cancelFlight();openCard();};
-      flightTimer=window.setTimeout(land,760);
+      flightTimer=window.setTimeout(land,940);
       flightAnimation.finished.then(land,land);
     }catch{cancelFlight();openCard();}
   }
@@ -420,7 +502,8 @@
   function changed(d){
     if(dead||!node)return;
     const previous=batch.get(d),next=sample(d);
-    if(!history.has(d)||history.get(d).active!==next.active)historyOrder=null;
+    const old=history.get(d);
+    if(!old||old.active!==next.active||old.time!==next.time||sortKey==="size"&&sortBytes(old)!==sortBytes(next))historyOrder=null;
     history.set(d,next);
     if(next.active){
       if(!previous?.active){
@@ -455,6 +538,7 @@
     try{prefs.removeObserver(SIDE,scheduleMount);}catch{}
     node?.remove();card?.remove();node=fill=speed=icon=card=cardFill=cardName=cardSpeed=cardStatus=cardBytes=cardIcon=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
     dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();historyOrder=null;limit=30;cardHeight=82;dockHeight=0;
+    sortKey="time";sortDir=-1;headerNormal=headerConfirm=clearButton=sortTime=sortSize=yesButton=noButton=null;confirming=clearing=false;
     snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"});
     root.removeAttribute(ACTIVE);root.removeAttribute("data-zr-downloads-native");lastDockRect=null;
   }

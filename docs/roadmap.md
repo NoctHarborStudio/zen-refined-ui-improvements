@@ -11,9 +11,9 @@ Baseline: `0.5.0-preview.2`. Zen Refined owns general browser UI improvements. O
 | Startup placeholder suppression | Implemented; optional Gecko preferences with restoration. |
 | Center Assembly | Implemented and visually accepted. Includes floating search, tabs, bookmarks, navigation, extension and window controls. Performance issue tracked separately. |
 
-## In development — 0.6.0-preview.5
+## In development — 0.6.0-preview.6
 
-- Download Indicator: native sidebar icon + three-second detail card, mirrored placement and left-side OnePlane fallback, optional future Extension Dock host. Native Downloads data, live sidebar tracking and custom Downloads Dock with native Show in folder. Other Library sections deferred.
+- Download Indicator: native sidebar icon + three-second detail card, mirrored placement and left-side OnePlane fallback, optional future Extension Dock host. Native Downloads data, live sidebar tracking and custom Downloads Dock with native Show in folder, time/size sorting, confirmed Clear and fluid notification. Other Library sections deferred.
 - Page Progress: top center-out gray line, no percentage. Validate actual Zen loading and tab switching before accepting.
 - Integration pipeline: Zen Refined owns data/rendering; OnePlane will own the final Extension Dock placement. No new OnePlane dependency or duplicate listener.
 

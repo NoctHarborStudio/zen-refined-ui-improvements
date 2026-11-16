@@ -121,3 +121,9 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Native compact right/left: card follows actual translated toolbox edge during reveal/hide; no stale floating position, soft entrance/exit. No continuous idle frame loop. Verify click target and clipping in real Zen.
 - [ ] Card opens custom Downloads Dock, not Library. Native list hydration, active-first ordering, 30-item paging, live row updates, Show in folder using native method, empty/error state, close/Escape/outside click. No private/public mixing or file launching/deletion. Native Library other sections unchanged.
 - [ ] Toggle module, OnePlane host, resize, unload during open/closing; remove all DOM/listeners/timers/frames. Page Progress and shared bookmarks unchanged.
+
+## 0.6.0-preview.6 — fluid notification, native palette and dock controls
+
+- [ ] Card grows from small rounded edge seed into full card over 780ms, then contents fade in; reverses without text scaling. 780ms flight, existing 3s hold, edge tracking and reduced motion retained.
+- [ ] Theme matches actual Zen sidebar in light/dark, custom gradients and Compact Mode. Confirm sampled theme tokens from toolbox, not generic arrowpanel gray.
+- [ ] Time/size ascending/descending, unknown size last, active first; order cache invalidated only when relevant values change. Clear replaces header with Yes left/No right; No/Escape restore, Yes removes finished eligible list entries only, keeps active/partial/blocked and disk files. Confirm native list persistence, private/public isolation and cleanup on unload during clear.
