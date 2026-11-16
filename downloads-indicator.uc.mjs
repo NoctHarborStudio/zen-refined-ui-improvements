@@ -79,7 +79,7 @@
       if(n?.parentElement&&toolbox.contains(n)&&!n.closest?.("#zen-sidebar-foot-buttons,#zen-sidebar-bottom-buttons"))return {parent:n.parentElement,before:n};
     }
     // A different native layout still gets a top-of-toolbox slot.
-    return {parent:toolbox,before:toolbox.firstElementChild};
+    return {parent:toolbox,before:[...toolbox.children].find(n=>n!==node)||null};
   }
   function side(){
     if(onePlane())return "left";
@@ -122,7 +122,7 @@
     const parent=slot||placement?.parent||root;
     const before=placement?.before;
     anchor=before||null;
-    const changed=node.parentElement!==parent||(native&&before&&node.nextElementSibling!==before);
+    const changed=node.parentElement!==parent||(native&&!!before&&before!==node&&node.nextElementSibling!==before);
     const oldSide=node.getAttribute("data-side");
     if(changed){
       if(native&&before&&before!==node)parent.insertBefore(node,before);
