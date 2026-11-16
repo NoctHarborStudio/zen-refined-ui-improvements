@@ -1,43 +1,90 @@
 # Zen Refined — UI Improvements for Zen Browser
 
-Modular visual and usability improvements for [Zen Browser](https://zen-browser.app/).
+A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
-Zen Refined is independent of [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs). Use either mod or both together.
+**Current development preview: `0.6.0-preview.16`** · Target: Zen 1.24.2b / Sine 2.3.3.
 
-> **Development preview.** The first build targets Zen 1.24.2b and Sine 2.3.3. Native-browser runtime testing is pending.
+> Preview software. Core features have been tested by the maintainer/user in Zen; compatibility across operating systems, themes and configurations is not guaranteed. Install in a test profile first.
+
+## Available features
+
+| Feature | What it does | Status |
+| --- | --- | --- |
+| **Magnetic Bookmarks** | Native bookmark magnification, smooth neighbor movement, downward expansion and spring-based liquid indicator. | User-tested |
+| **Downloads Dock** | Native sidebar indicator, flight notification, edge-connected fluid reveal, recent and full downloads, live transfer data and native file actions. | Core accepted; latest wave refinement pending visual validation |
+| **Page Progress** | Symmetric, center-out page-loading line without percentages. | User-tested |
+| **Center Assembly** | One-shot startup assembly of tabs, address bar, bookmarks and controls without an opaque window cover. | Implemented; startup flash / FPS follow-up deferred |
+| **Center Disassembly** | 520 ms reverse animation on the native close-window command. | User-tested |
+| **Startup appearance** | Optional suppression of Gecko's blank window and Windows pre-XUL skeleton, with reversible preferences. | Implemented |
 
 ## Magnetic Bookmarks
 
-A responsive bookmark toolbar with smoothly expanding native bookmarks, a subtle upward lift and an inertial liquid indicator. The hovered bookmark reserves extra layout space so adjacent bookmarks move rather than overlap. The indicator remains anchored near the hovered bookmark's center and responds gently to the pointer inside it.
+Hover a bookmark to expand its native card downward, with neighbors making space instead of overlapping. Default magnification is 142%, duration 240 ms, with a liquid indicator and optional glow. Native labels/icons use actual sizes and pixel-aligned positioning rather than text scaling. Native clicks, folders, context menus and bookmark data are preserved. The shared controller works with OnePlane's stable background contour and suspends hover effects during its address wave.
 
-- 142% horizontal magnification by default, limited by available space.
-- 6 px upward lift, 240 ms expansion, small 12–18 px indicator.
-- A spring-based indicator stretches in flight and relaxes at rest.
-- Native bookmark items, click actions and folder menus are retained.
-- Reduced-motion support and individual controls in Sine.
+## Downloads Dock
 
-## Install the preview in Sine
+- Real download speed, progress and status from Gecko's Downloads API.
+- Automatic flight notification followed by a 780 ms fluid wave that begins at the sidebar edge, grows from a point and reverses on close. The latest four downloads are shown first.
+- **All downloads** expands the same panel into a full-height list. Sort by time or size in either direction; open completed files or show them in their folder. Optional average speed and elapsed time are available for transfers observed in the current session.
+- Confirmed **Clear** removes eligible finished list entries only, not files on disk, active/partial/blocked downloads or browsing history.
+- Automatic notifications dismiss after two seconds outside the card; manual interaction pins the downloads panel. Compact Mode is held only when opened through its sidebar icon, not through automatic notifications or their All downloads action.
+- Mirrors left/right native placement, uses the native sidebar palette and supports an optional OnePlane host. Native Library history and other Library sections remain untouched.
 
-In **Settings → Sine Mods**, install the GitHub source:
+## Page Progress
+
+A small gray loading line grows symmetrically from the top center of the browser. Uses native navigation events and does not display invented percentages. The indicator is independent of the Downloads Dock.
+
+## Startup and closing
+
+**Center Assembly** (1050 ms by default) assembles real browser chrome, including the optional OnePlane tab row. The page and native background remain visible; there are no opaque startup overlays. Late script loads skip the animation instead of re-hiding the painted interface. **Center Disassembly** (520 ms) is its short reverse, with native close confirmations preserved. System shutdown, global quit and individual tab closure bypass the closing effect.
+
+The optional placeholder suppression sets only `browser.startup.blankWindow` and `browser.startup.preXulSkeletonUI` to false and restores previous values when disabled. It does not control OS-level window animations, Mica initialization or Windhawk.
+
+## Installation
+
+1. Open **Settings → Sine Mods**.
+2. Install the preview source below (the `main` branch is documentation only).
+3. Enable the mod and restart Zen if the scripts have not loaded.
 
 ```text
 NoctHarborStudio/zen-refined-ui-improvements/tree/preview
 ```
 
-Enable the mod, then restart Zen if the script has not loaded. Magnetic Bookmarks is enabled by default. Use a test profile first.
+Sine requires permission to run JavaScript from unpublished GitHub mods. Review the [source](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview) before granting it. Zen Refined does not change that global permission or require OnePlane, Nebula, Windhawk or manual theme edits.
 
-Sine requires explicit permission to run JavaScript from unpublished GitHub mods. Review [bookmarks.uc.mjs](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/bookmarks.uc.mjs) before granting that permission. This is a global Sine setting; Zen Refined never changes it. No manual Zen or Nebula preference edits are needed.
+## Settings
 
-## Configuration
+All options are available through Sine. Individual modules can be disabled independently; reduced-motion preferences are respected.
 
-All settings are available in the mod's Sine preferences. Disable Magnetic Bookmarks to restore the native bookmarks appearance. Disable or remove Zen Refined to unload the module entirely.
+| Setting | Default |
+| --- | --- |
+| Magnetic Bookmarks | On |
+| Bookmark magnification / duration | 142% / 240 ms |
+| Liquid hover indicator / glow | On / On |
+| Stabilize OnePlane background | On |
+| Disable Firefox startup placeholder windows (restart required) | On |
+| Center Assembly / duration | On / 1050 ms |
+| Center Disassembly | On |
+| Download indicator / transfer statistics | On / On |
+| Page loading indicator | On |
 
-## Compatibility
+## Development pipeline
 
-The implementation works on existing native toolbar items and does not alter OnePlane, the tab strip, bookmark data or other mods. Actual compatibility with OnePlane, Nebula, Bookmark Toolbar Tweaks, folders, overflow, and browser customization still requires testing. When width is limited, magnification is reduced rather than intentionally forcing items into the overflow menu.
+The following are **planned, not available yet**:
 
-See the [validation checklist](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/validation.md).
+1. **Smart Compact Mode** — intentional edge-hover and multi-monitor behavior, reusing native delay preferences where possible.
+2. **Smart Context Menu** — compact organization and configurable native tab commands.
+3. **Smart Search** — recent active tabs (MRU) in the empty address bar, native tab switching and workspace-aware OnePlane integration.
+
+Native Zen Library already provides history search and recently closed tabs, so a separate History Dock is not planned. Other visual refinements will be based on reproducible issues. Semi-Compact Mode and startup performance investigations remain deferred.
+
+## Compatibility & known limitations
+
+Zen Refined is standalone; OnePlane is optional. The two mods share Magnetic Bookmarks through a per-window lease, with no runtime network dependency or duplicate controller. The startup flash reported on Windows persists after removing the mod's opaque covers; native DWM/Mica/Windhawk investigation is deferred. Actual theme compatibility, mixed-DPI monitors, keyboard accessibility, reduced motion, unload/reload and uncommon native states require broader testing. No claim of engine-wide speed improvements.
+
+- [Roadmap](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/roadmap.md) · [Known issues](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/known-issues.md) · [Validation](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/validation.md)
+- [Indicator architecture](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/docs/indicators.md) · [Changelog](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/CHANGELOG.md)
 
 ## License
 
-[MIT](LICENSE). Independent community project, not affiliated with Zen Browser.
+[MIT](LICENSE). Independent community project, not affiliated with Zen Browser. Adaptive Page Transitions is retired; its [historical archive](https://github.com/NoctHarborStudio/zen-refined-ui-improvements/blob/preview/legacy/adaptive-page-transitions/README.md) is not loaded.
