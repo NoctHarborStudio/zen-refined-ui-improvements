@@ -89,3 +89,10 @@ Known limitations of the untested preview: native overflow measurements can vary
 - Visual Center Assembly design accepted; intermittent frame drops during tab fan-out remain a [known issue](known-issues.md). Optimization is deferred, not completed.
 - When resumed, capture a real cold-start performance profile and validate frame pacing without altering the accepted visual sequence.
 - Reverse window-close assembly is an optional deferred [roadmap idea](roadmap.md), not an implemented feature or a current validation requirement.
+
+## 0.6.0-preview.1 — download and page indicators
+
+- [ ] Start Steam installer download; card enters right to left in standalone Zen, shows real transfer rate and progress, opens native downloads on click. Unknown length, concurrent downloads, fast completion, cancel, failure, initial history, private/public isolation.
+- [ ] With OnePlane active, temporary left fallback; later dock host can reparent the same card. Toggle OnePlane, Compact Mode, settings, resize, unload. Native Library stays unchanged.
+- [ ] Page loads: slow, fast, cached, redirects, error/abort, selected/background tab switching, SPA navigation, split view; no false 100% on canceled requests. Unknown length pulse; estimated percentage optional. Line is click-through and independent of toolbar visibility.
+- [ ] Verify actual frame pacing, no repeated JS timers while idle, no progress-driven layout reads, listeners and observers removed on disable/unload.

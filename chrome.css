@@ -163,3 +163,108 @@
     height: max(100%, var(--op-measured-toolbar-height, var(--op-height))) !important;
   }
 }
+
+/* Zen Refined — native transfer and page indicators. The fixed fallback
+ * never participates in toolbar layout, bookmark sizing or contour masks. */
+:root[data-zr-downloads-active] zen-download-animation,
+:root[data-zr-downloads-active] .zen-download-box-animation {
+  display: none !important;
+}
+#zr-download-indicator {
+  position: fixed !important;
+  inset: 54px 14px auto auto !important;
+  z-index: 2147483000 !important;
+  display: flex !important;
+  box-sizing: border-box !important;
+  align-items: center;
+  gap: 10px;
+  width: 174px;
+  height: 43px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 10px;
+  padding: 7px 10px;
+  appearance: none;
+  color: var(--toolbar-color, light-dark(#32363c,#e0e2e7));
+  background: light-dark(#eef0f4,#252831);
+  box-shadow: 0 4px 14px #0003;
+  font: 11px/1.25 system-ui, sans-serif;
+  text-align: start;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(18px);
+  transition: transform 280ms cubic-bezier(.22,.72,.2,1),opacity 220ms ease,visibility 280ms;
+}
+#zr-download-indicator[data-zr-oneplane] {
+  inset: 54px auto auto 14px !important;
+  transform: translateX(-18px);
+}
+#zr-download-indicator[data-zr-hosted] {
+  position: relative !important;
+  inset: auto !important;
+  z-index: auto !important;
+  flex: 0 0 auto;
+  box-shadow: none;
+  height: 34px;
+}
+#zr-download-indicator[data-zr-hosted]:not([data-visible]) { display: none !important; }
+#zr-download-indicator[data-visible] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+#zr-download-indicator:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+#zr-download-indicator .zr-download-body { display:flex;flex:1;min-width:0;flex-direction:column;gap:6px; }
+#zr-download-indicator .zr-download-line { display:flex;align-items:center;justify-content:space-between;gap:5px;white-space:nowrap;font-variant-numeric:tabular-nums; }
+#zr-download-indicator .zr-download-speed { font-weight:600; }
+#zr-download-indicator .zr-download-status { opacity:.64; }
+#zr-download-indicator .zr-download-track { position:relative;display:block;overflow:hidden;height:3px;border-radius:3px;background:color-mix(in srgb,currentColor 13%,transparent); }
+#zr-download-indicator .zr-download-fill { display:block;width:100%;height:100%;border-radius:3px;background:currentColor;opacity:.82;transform-origin:right center;transform:scaleX(var(--zr-download-progress,0));transition:transform 240ms cubic-bezier(.2,.75,.2,1); }
+#zr-download-indicator[data-indeterminate] .zr-download-fill { width:42%;animation:zr-download-unknown 1.1s ease-in-out infinite; }
+@keyframes zr-download-unknown { from{transform:translateX(238%)} to{transform:translateX(-105%)} }
+#zr-download-indicator .zr-download-icon {
+  flex:0 0 18px;width:18px;height:18px;background:currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v12m-5-5 5 5 5-5M5 16v4h14v-4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+#zr-download-indicator[data-state="complete"] .zr-download-icon {
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5L20 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+#zr-page-progress {
+  position: fixed !important;
+  inset: 0 0 auto 50% !important;
+  height: 3px;
+  z-index: 2147482999 !important;
+  pointer-events: none !important;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 160ms ease, visibility 160ms;
+  color: light-dark(#858a94,#969ba6);
+}
+#zr-page-progress[data-visible] { opacity: .9;visibility: visible; }
+#zr-page-progress .zr-page-progress-fill {
+  width:100%;height:100%;border-radius:0 3px 3px 0;
+  background:currentColor;
+  transform-origin:left center;
+  transform:scaleX(var(--zr-page-progress,0));
+  transition:transform 240ms cubic-bezier(.22,.72,.2,1);
+}
+#zr-page-progress[data-indeterminate] .zr-page-progress-fill {
+  animation:zr-page-unknown 1.6s ease-in-out infinite;
+}
+@keyframes zr-page-unknown {
+  0%,100%{transform:scaleX(.08);opacity:.55}
+  55%{transform:scaleX(.38);opacity:1}
+}
+#zr-page-progress .zr-page-progress-label {
+  position:absolute;right:9px;top:5px;font:10px/1.3 system-ui,sans-serif;
+  font-variant-numeric:tabular-nums;color:currentColor;
+}
+#zr-page-progress .zr-page-progress-label:empty { display:none; }
+:root[data-zr-startup-phase] :is(#zr-download-indicator,#zr-page-progress) { visibility:hidden !important; }
+@media (prefers-reduced-motion: reduce) {
+  #zr-download-indicator,#zr-download-indicator .zr-download-fill,#zr-page-progress,#zr-page-progress .zr-page-progress-fill { transition:none !important;animation:none !important; }
+  #zr-download-indicator[data-indeterminate] .zr-download-fill { transform:scaleX(1);opacity:.55; }
+  #zr-page-progress[data-indeterminate] .zr-page-progress-fill { transform:scaleX(.2);opacity:.65; }
+}

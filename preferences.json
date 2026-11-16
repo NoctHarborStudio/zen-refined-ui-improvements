@@ -128,5 +128,23 @@
         "value": 1500
       }
     ]
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.downloads.indicator",
+    "label": "Download indicator (speed and progress)",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.page-progress.enabled",
+    "label": "Page loading indicator",
+    "defaultValue": true
+  },
+  {
+    "type": "checkbox",
+    "property": "zen.refined.page-progress.percent",
+    "label": "Show estimated page loading percentage",
+    "defaultValue": false
   }
 ]
