@@ -75,9 +75,11 @@ Known limitations of the untested preview: native overflow measurements can vary
 
 ## 0.5.0-preview.2 — softer assembly and full chrome coverage
 
-- [ ] Default 1050 ms; check preserved explicit duration choices. Tab fan, edge controls, bookmark wave and floating search have distinct overlapping timing.
+- [ ] Default 1050 ms; migrate the former 760 ms default once, preserve other choices, allow 760 ms to be selected again. Tab fan, edge controls, bookmark wave and floating search have distinct overlapping timing.
 - [ ] Real floating #urlbar reveals independently without overwriting its native positioning. Verify the top-layer popup and late `zen-newtab`/`zen-floating-urlbar` attributes.
 - [ ] Navigation, compact/sidebar, extensions, page actions and actual minimize/maximize/close controls animate once, without nested parent/child effects. Disabled opacity and original inline styles restore.
 - [ ] Important theme declarations do not block progress-driven reveal. Late Places children receive their own animation; bounded cleanup restores all unowned styles and releases the panel hold on input/unload/timeout.
 
 - [ ] Confirm temporary sheet uses Gecko USER_SHEET (same cascade origin as Sine), and author/user-important theme declarations cannot prevent the reveal. Verify temporary sheet removal and original attributes/styles after animation or cancellation.
+
+- [ ] Native CSS transitions are temporarily disabled only for an animated element, so they do not chase the animated progress value. Native transitions are restored at effect completion.

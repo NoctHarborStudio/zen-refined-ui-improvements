@@ -15,6 +15,16 @@
   window[SEEN]=true;
   if(!prefs.getBoolPref(ENABLE,true)||reduced.matches||now()>4000||window.closed||
       root.hasAttribute("customizing")||root.getAttribute("inDOMFullscreen")==="true")return;
+  // Sine saves the previous default as a user value. Upgrade that exact
+  // 760ms default once; preserve every other choice, and allow users to
+  // select 760ms again after the migration.
+  const MIGRATED="zen.refined.startup.duration-v2-migrated";
+  try{
+    if(!prefs.getBoolPref(MIGRATED,false)){
+      if(prefs.getIntPref(DURATION,1050)===760)prefs.setIntPref(DURATION,1050);
+      prefs.setBoolPref(MIGRATED,true);
+    }
+  }catch{}
   const duration=Math.max(400,Math.min(1500,prefs.getIntPref(DURATION,1050)));
   const scale=duration/1050;
   const started=now(),deadline=started+2400;
@@ -342,6 +352,8 @@
         opacity: 0 !important;
       }
       ${base} {
+        /* Do not let a native CSS transition chase each sampled value. */
+        transition-property: none !important;
         opacity: calc(var(--zr-startup-base-opacity) * var(${PROGRESS})) !important;
       }
       ${base}[data-zr-startup-move] {
