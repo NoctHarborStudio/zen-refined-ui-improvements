@@ -6,6 +6,7 @@
   const KEY="__zenRefinedSmartSearch",REGISTRY="__zenRefinedSmartSearchRegistry";
   const NAME="ZenRefinedRecentTabs",TYPE="zr-recent-tab",STATUS="__zenRefinedSmartSearchStatus";
   const PREF="zen.refined.smart-search.enabled";
+  const TOPICS=["topsites-refreshed","newtab-top-sites-changed"],RETRY_DELAYS=[180,500,1000,1800];
   const prefs=Services.prefs;
   const root=document.documentElement;
   if(typeof window.addUnloadListener!=="function"||root.hasAttribute("popup-window"))return;
@@ -224,7 +225,8 @@
   }
   let manager=null,registry=null,disposed=false,observer=null,joined=false,listener=null,child=null,parent=null,windowId=null;
   let bar=null,tabContainer=null,originalQuery=null,wrappedQuery=null,layoutRows=null,resizeObserver=null,openObserver=null,readyObserver=null,prefObserver=null,refreshTimer=0,inFlight=false,initialRecovered=false,ready=false,activeContext=null,windowState=null;
-  const diagnostic={version:5,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
+  let recoveryAttempts=0,topSitesObserver=null,wasOpen=false,refreshIsInitial=false;
+  const diagnostic={version:6,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
   const status=()=>({...diagnostic,registered:!!joined&&manager?.getProvider?.(NAME)===registry?.provider});
   window[STATUS]=status;
   const ROW_ATTRS=["data-zr-group","data-zr-first","data-zr-top","data-zr-cell","data-zr-rail","data-zr-column"];
@@ -270,20 +272,37 @@
       prefs.getBoolPref(PREF,true)&&prefs.getBoolPref("browser.urlbar.suggest.openpage",true)&&
       !bar.inOverflowPanel&&(bar.view?.isOpen||bar.hasAttribute?.("zen-newtab")||bar.hasAttribute?.("breakout-extend"));
   }
-  function cancelRefresh(){if(refreshTimer)window.clearTimeout(refreshTimer);refreshTimer=0;}
-  function scheduleRefresh(initial=false){
-    if(disposed||!joined||!window.setTimeout||!eligibleInput()||initial&&(!ready||initialRecovered))return;
-    cancelRefresh();
+  function recommendationsEnabled(){
+    return prefs.getBoolPref?.("browser.urlbar.suggest.topsites",true)!==false&&
+      prefs.getBoolPref?.("browser.newtabpage.activity-stream.feeds.system.topsites",true)!==false;
+  }
+  function countResults(rows){
+    const recent=rows.filter(r=>r.providerName===NAME||r.payload?.dynamicType===TYPE).length;
+    return {recent,recommended:rows.length-recent};
+  }
+  function recoveryNeeded(){
+    return !initialRecovered&&ready&&recoveryAttempts<RETRY_DELAYS.length&&
+      (!(diagnostic.visible>0)||recommendationsEnabled()&&!(diagnostic.recommended>0));
+  }
+  function cancelRefresh(){if(refreshTimer)window.clearTimeout(refreshTimer);refreshTimer=0;refreshIsInitial=false;}
+  function finishRecovery(){initialRecovered=true;if(refreshIsInitial)cancelRefresh();}
+  function scheduleRefresh(initial=false,fromTopSites=false){
+    if(disposed||!joined||!window.setTimeout||!eligibleInput()||initial&&!recoveryNeeded())return;
+    // A native readiness signal can shorten a pending retry. Normal focus
+    // and attribute notifications must not keep pushing its deadline back.
+    if(refreshTimer&&initial&&refreshIsInitial&&!fromTopSites)return;
+    cancelRefresh();refreshIsInitial=initial;
+    const delay=initial?(fromTopSites?60:RETRY_DELAYS[recoveryAttempts]):65;
     refreshTimer=window.setTimeout(()=>{
-      refreshTimer=0;
-      if(disposed||!eligibleInput()||inFlight||bar.view?.selectedElement||initial&&initialRecovered)return;
+      refreshTimer=0;refreshIsInitial=false;
+      if(disposed||!eligibleInput()||inFlight||bar.view?.selectedElement||initial&&!recoveryNeeded())return;
       if(initial){
-        if((diagnostic.visible||0)>0&&bar.view?.isOpen)return;
-        initialRecovered=true;
+        recoveryAttempts++;diagnostic.recoveryAttempts=recoveryAttempts;
+        console.info("[Zen Refined] Smart Search startup refresh: attempt="+recoveryAttempts);
       }
       try{bar.view?.clearTopSitesCache?.();bar.startQuery({allowAutofill:false,resetSearchState:false});}
       catch(e){console.warn("[Zen Refined] Smart Search refresh:",e);}
-    },initial?180:65);
+    },delay);
   }
   function onActivation(e){
     const tab=e?.target||window.gBrowser?.selectedTab;
@@ -312,7 +331,13 @@
       e.preventDefault();e.stopImmediatePropagation();
     }catch(e){console.warn("[Zen Refined] Smart Search Tab:",e);}
   }
-  function onEscape(e){if(e.key==="Escape"){cancelRefresh();initialRecovered=true;}}
+  function onEscape(e){if(["Escape","Tab","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Enter"].includes(e.key)){cancelRefresh();finishRecovery();}}
+  function onResultPointer(e){if(e.target?.closest?.(".urlbarView-row")){cancelRefresh();finishRecovery();}}
+  function onTopSitesReady(){
+    if(disposed||!joined||!recommendationsEnabled())return;
+    try{bar?.view?.clearTopSitesCache?.();}catch{}
+    if(recoveryNeeded()&&bar?.view?.isOpen&&!inFlight)scheduleRefresh(true,true);
+  }
   function onReady(){
     ready=true;onActivation();scheduleRefresh(true);
   }
@@ -370,8 +395,8 @@
       }
       listener={
         onQueryStarted(context){
-          inFlight=true;activeContext=context;
-          if(context.isPrivate||context.searchString!==""){clearLayout();return;}
+          inFlight=true;activeContext=context;cancelRefresh();
+          if(context.isPrivate||context.searchString!==""){finishRecovery();clearLayout();return;}
           diagnostic.viewQueries=(diagnostic.viewQueries||0)+1;
           console.info("[Zen Refined] Smart Search native query started");
         },
@@ -381,9 +406,15 @@
           inFlight=false;activeContext=context;layout(context);
           if(context.isPrivate||context.searchString!=="")return;
           const rows=context.results||[];
-          diagnostic.visible=rows.filter(r=>r.providerName===NAME||r.payload?.dynamicType===TYPE).length;
-          console.info("[Zen Refined] Smart Search native finished: recent="+diagnostic.visible+" total="+rows.length);
-          if(!diagnostic.visible)scheduleRefresh(true);else initialRecovered=true;
+          const counts=countResults(rows);
+          diagnostic.visible=counts.recent;diagnostic.recommended=counts.recommended;
+          console.info("[Zen Refined] Smart Search native finished: recent="+counts.recent+" recommended="+counts.recommended+" total="+rows.length);
+          // Recent tabs can be ready before native Top Sites are populated.
+          // Do not mark startup recovered just because our rows exist.
+          if(counts.recommended>0&&(counts.recent>0||diagnostic.candidates===0)||
+             counts.recent>0&&!recommendationsEnabled())finishRecovery();
+          else if(recoveryNeeded())scheduleRefresh(true);
+          else if(recoveryAttempts>=RETRY_DELAYS.length)finishRecovery();
         }
       };
       try{child?.addListener?.(listener);}catch{}
@@ -391,22 +422,28 @@
       tabContainer?.addEventListener?.("TabSelect",onActivation);
       bar?.addEventListener?.("focusin",onFocus);
       bar?.addEventListener?.("keydown",onEscape,true);
+      bar?.addEventListener?.("pointerdown",onResultPointer,true);
+      topSitesObserver=()=>onTopSitesReady();
+      for(const topic of TOPICS)try{Services.obs.addObserver(topSitesObserver,topic);}catch{}
       window.addEventListener("keydown",onGridTab,true);
       if(window.MutationObserver&&bar?.nodeType){
         openObserver=new window.MutationObserver(()=>{
-          if(!bar.view?.isOpen)clearLayout();
+          const open=!!bar.view?.isOpen;
+          if(!open){clearLayout();if(wasOpen){cancelRefresh();finishRecovery();}}
           else if(activeContext)layout(activeContext);
+          wasOpen=open;
           scheduleRefresh(true);
         });
         openObserver.observe(bar,{attributes:true,attributeFilter:["open","zen-newtab","breakout-extend"]});
       }
+      wasOpen=!!bar?.view?.isOpen;
       prefObserver=()=>{cancelRefresh();clearLayout();try{bar?.view?.clearTopSitesCache?.();}catch{}};
       prefs.addObserver?.(PREF,prefObserver);
       if(window.gBrowserInit&& !window.gBrowserInit.delayedStartupFinished){
         readyObserver=subject=>{if(subject!==window)return;Services.obs.removeObserver(readyObserver,"browser-delayed-startup-finished");readyObserver=null;onReady();};
         Services.obs.addObserver(readyObserver,"browser-delayed-startup-finished");
       }else onReady();
-      console.info("[Zen Refined] Smart Search provider ready (preview.21, manager="+(direct===manager?"address-bar":"singleton")+")");
+      console.info("[Zen Refined] Smart Search provider ready (preview.22, manager="+(direct===manager?"address-bar":"singleton")+")");
     }catch(e){diagnostic.stage="error";diagnostic.error=String(e);console.warn("[Zen Refined] Smart Search unavailable:",e);}
   }
   function dispose(){
@@ -419,6 +456,9 @@
     tabContainer?.removeEventListener?.("TabSelect",onActivation);
     bar?.removeEventListener?.("focusin",onFocus);
     bar?.removeEventListener?.("keydown",onEscape,true);
+    bar?.removeEventListener?.("pointerdown",onResultPointer,true);
+    if(topSitesObserver)for(const topic of TOPICS)try{Services.obs.removeObserver(topSitesObserver,topic);}catch{}
+    topSitesObserver=null;
     window.removeEventListener("keydown",onGridTab,true);
     if(child&&wrappedQuery&&child.startQuery===wrappedQuery)child.startQuery=originalQuery;
     try{bar?.view?.clearTopSitesCache?.();}catch{}

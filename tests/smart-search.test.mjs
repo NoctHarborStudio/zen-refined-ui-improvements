@@ -103,7 +103,7 @@ test("native view listener reports final result counts and detaches on unload",(
  assert.equal(w.__zenRefinedSmartSearchStatus().registered,true);
  listener.onQueryFinished({searchString:"",results:[{providerName:"ZenRefinedRecentTabs"},{providerName:"native"}]});
  assert.equal(w.__zenRefinedSmartSearchStatus().visible,1);
- assert.equal(logs.at(-1),"[Zen Refined] Smart Search native finished: recent=1 total=2");
+ assert.equal(logs.at(-1),"[Zen Refined] Smart Search native finished: recent=1 recommended=1 total=2");
  w.__zenRefinedSmartSearch();assert.equal(listener,null);assert.equal(providers.size,0);
 });
 
@@ -153,7 +153,9 @@ test("actual lifecycle raises only zero-prefix budget, groups native rows and pe
  assert.equal(child.startQuery({searchString:"",isPrivate:true,maxResults:5}),5);
  // The first-ready refresh is coalesced and not repeated.
  const fire=()=>{const pending=[...timers.values()];timers.clear();for(const fn of pending)fn();};
- fire();assert.equal(queries,1);events.focusin();fire();assert.equal(queries,1);
+ fire();assert.equal(queries,1);
+ listener.onQueryFinished({searchString:"",results:rows.children.map(r=>r.result)});
+ events.focusin();fire();assert.equal(queries,1);
  listener.onQueryResults({searchString:"",results:rows.children.map(r=>r.result)});
  assert.equal(rows.hasAttribute("data-zr-smart-grid"),true);
  assert.equal(rows.children[0].getAttribute("data-zr-first"),"Recent tabs");
@@ -185,4 +187,37 @@ test("space priority chooses the pool, chronology determines display order",()=>
  const entries=[{id:"a",last:100,current:true,order:0},{id:"b",last:50,current:true,order:1},{id:"c",last:500,current:false,order:2},{id:"d",last:400,current:false,order:3}];
  assert.deepEqual(api.selectRecent(entries,9,6).map(x=>x.id),["c","a","b"]);
  assert.deepEqual(api.selectRecent(entries,8,6).map(x=>x.id),["a","b"]);
+});
+
+test("startup recovers missing native recommendations even when Recent tabs already exist",()=>{
+ const fixtureData=fixture(),w=fixtureData.win,providers=new Map(),timers=new Map(),events={},observers=new Map();let listener,serial=0,queries=0;
+ const actual={registerProvider:p=>providers.set(p.name,p),getProvider:n=>providers.get(n),unregisterProvider:p=>providers.delete(p.name)};
+ w.addUnloadListener=()=>{};w.addEventListener=()=>{};w.removeEventListener=()=>{};
+ w.setTimeout=(fn,ms)=>{const n=++serial;timers.set(n,{fn,ms});return n;};w.clearTimeout=n=>timers.delete(n);
+ w.gURLBar={controller:{startQuery(){},addListener(l){listener=l;},removeListener(){}},parentController:{manager:actual},focused:true,value:"",view:{isOpen:true,selectedElement:null,clearTopSitesCache(){}},startQuery(){queries++;},addEventListener:(k,fn)=>events[k]=fn,removeEventListener(){}};
+ w.gBrowser.tabContainer={addEventListener(){},removeEventListener(){}};
+ const modules={
+  "moz-src:///browser/components/urlbar/UrlbarProvidersManager.sys.mjs":{ProvidersManager:{}},
+  "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs":{UrlbarProvider:class{},UrlbarUtils:fixtureData.utils},
+  "chrome://browser/content/urlbar/UrlbarShared.mjs":{UrlbarShared:{PROVIDER_TYPE:{PROFILE:1}}},
+  "chrome://browser/content/urlbar/UrlbarResult.mjs":{UrlbarResult:class{}},
+  "resource://gre/modules/PrivateBrowsingUtils.sys.mjs":{PrivateBrowsingUtils:{isWindowPrivate:()=>false}},
+  "moz-src:///browser/components/sessionstore/SessionStore.sys.mjs":{SessionStore:fixtureData.session}
+ };
+ const prefs={getBoolPref:()=>true,addObserver(){},removeObserver(){}};
+ const obs={addObserver:(fn,t)=>observers.set(t,fn),removeObserver:(fn,t)=>observers.delete(t)};
+ new Function("window","document","Services","ChromeUtils","console",source)(w,{documentElement:{hasAttribute:()=>false}},{prefs,obs},{importESModule:p=>modules[p]},{info(){},warn(){}});
+ const recent={providerName:"ZenRefinedRecentTabs"},native={providerName:"UrlbarProviderTopSites"};
+ const finish=results=>{listener.onQueryStarted({searchString:""});listener.onQueryFinished({searchString:"",results});};
+ const fire=()=>{const p=[...timers.values()];timers.clear();for(const t of p)t.fn();};
+ finish([recent]);assert.equal(timers.size,1);
+ assert.equal([...timers.values()][0].ms,180);
+ observers.get("topsites-refreshed")();assert.equal([...timers.values()][0].ms,60);
+ fire();assert.equal(queries,1);
+ finish([recent]);assert.equal([...timers.values()][0].ms,500);
+ fire();assert.equal(queries,2);
+ finish([recent,native]);assert.equal(timers.size,0);
+ observers.get("newtab-top-sites-changed")();assert.equal(timers.size,0);
+ assert.equal(w.__zenRefinedSmartSearchStatus().recommended,1);
+ w.__zenRefinedSmartSearch();assert.equal(observers.size,0);
 });

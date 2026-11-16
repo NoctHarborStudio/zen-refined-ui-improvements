@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.6.0-preview.21`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.22`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -101,3 +101,7 @@ User approved up to six recent tabs and six recommended results, each 2 columns 
 ## Smart Search preview.21 — chronological columns
 
 User confirms preview.20 works; recommended entries were below the native 244px scroll cap. Implement column-major 6+6 ordering, sequential dot rails and stable separators, centered time, viewport-bounded expanded result height with no visible scrollbar, and scoped native Tab cycling. Verify standalone/OnePlane, short windows, actual geometry, keyboard navigation and reduced motion.
+
+## Preview.22 — first-open recommendations
+
+Preview.21 grouped visual layout and timeline accepted in Zen/OnePlane. User reports startup animation runs again; no changes requested to it or rail widths. Cold-start Recommended still missing until reopening; preview.22 corrects premature recovery and listens for native Top Sites readiness. Runtime cold-start verification pending.

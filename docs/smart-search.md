@@ -31,3 +31,7 @@ The approved 6+6 grid replaces the initial four-item limit. Only the eligible ze
 Explicit grid coordinates preserve native DOM order and fill the left column before the right. Each group starts on a fresh grid row. The recent rail is a noninteractive CSS pseudo-element with sequential dot motion; reduced motion bypasses it. The Zen results max-height token defaults to 244px, overridden only on the grid, with a viewport limit and hidden scrollbar fallback. Tab/Shift+Tab use the native selectedRowIndex setter within the focused eligible grid, never a secondary action. No global keyboard preference changes.
 
 Current workspace/Essentials retain priority during candidate selection, but the final six entries are sorted by activation time across both columns, with the active tab first.
+
+## Preview.22 — first-open recommendations
+
+Preview.21 user testing confirmed both columns, timeline and OnePlane layout, but cold startup showed only Recent tabs until reopening search. The previous recovery incorrectly stopped at the first recent result. Count native recommendations separately, listen for `topsites-refreshed` / `newtab-top-sites-changed`, and retry the focused eligible zero-prefix search with bounded delays (180/500/1000/1800ms, readiness event can expedite). Stop on successful groups, disabled Top Sites with recent results, user navigation, close, typing or exhaustion. Native results remain native; no synthetic history results or preference changes. Live cold-start confirmation pending.

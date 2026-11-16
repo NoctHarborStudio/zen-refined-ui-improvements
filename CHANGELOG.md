@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.22
+
+- Fix Smart Search startup recovery prematurely completing when Recent tabs were present but native Recommended results were absent. Track both groups separately; react to native Top Sites readiness notifications and allow up to four coalesced startup refreshes while the eligible search remains focused. Do not reopen a dismissed view or disrupt typing/result navigation. No CSS or animation changes.
+
 ## 0.6.0-preview.21
 
 - Smart Search fills columns top-to-bottom (1–3 left, 4–6 right), for both groups. Keep native DOM/selection order. Add subtle sequential timeline dots, stable column and section dividers, vertically centered timestamps and reduced-motion support.

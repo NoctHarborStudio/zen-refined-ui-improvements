@@ -158,3 +158,5 @@ Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regressio
 - [ ] Cold start first floating search, active/new tab before leaving it, 6+6 native results when available, missing results, narrow / wide, OnePlane and standalone. Native Tab/arrow/Enter/mouse still choose correct tab; type text to exit grid. Check no focus stealing after Escape and no private results. Verify settings toggle/unload removes layout and query wrapper.
 
 - [ ] Preview.21: all six recommended entries visible at ordinary desktop height, column order 1–3 left / 4–6 right for both groups, sequential rails, stable dividers, centered time. Check Tab/Shift+Tab/Enter, Ctrl+Tab, typed search, narrow and short viewport, reduced motion and both Zen and OnePlane.
+
+- [ ] Preview.22: cold start, leave first floating search open; Recent may arrive first, Recommended should populate without Ctrl+T/reopen when native Top Sites are ready. Check disabled native suggestions, no results, close, typing, Tab selection, and bounded retries. Approved styling and startup animation remain unchanged.
