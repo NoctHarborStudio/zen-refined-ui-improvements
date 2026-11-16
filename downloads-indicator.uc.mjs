@@ -13,7 +13,7 @@
   if(root.hasAttribute("popup-window")||typeof window.addUnloadListener!=="function")return;
   window[KEY]?.dispose?.();
   let dead=false,epoch=0,view=null,list=null,node=null,fill=null,speed=null,icon=null,host=null;
-  let flight=null,flightAnimation=null,panelAnimation=null,panelToken=0,entering=false;
+  let flight=null,flightAnimation=null,panelAnimation=null,panelToken=0,entering=false,manualHold=false,overlayLayer=null;
   let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,flightTimer=0,latest=null;
   let updateTimer=0,hideTimer=0,readyObserver=null,layoutObserver=null,initialized=false,hydrating=false;
   let lastDockRect=null,followFrame=0,followUntil=0,overlayUntil=0;
@@ -150,18 +150,21 @@
     // The approved demo's asymmetric cubic contour. All frames have
     // identical commands, so Gecko interpolates paths without JS ticks.
     const l=width-span,r=width,w=span,tl=topL,tr=topR,bl=bottomL,br=bottomR;
-    const rl=Math.min(rL,w/2,(bl-tl)/2),rr=Math.min(rR,w/2,(br-tr)/2),k=.55228475;
+    const rl=Math.min(rL,w/2,Math.max(0,bl-tl)/2),rr=Math.min(rR,w/2,Math.max(0,br-tr)/2),k=.55228475;
     const point=(x,y)=>`${(side==="right"?x:width-x).toFixed(3)} ${y.toFixed(3)}`;
     const M=(x,y)=>"M "+point(x,y),C=(...p)=>"C "+point(p[0],p[1])+" "+point(p[2],p[3])+" "+point(p[4],p[5]);
+    // Keep control points inside the straight-edge span. On a circular
+    // seed these edges have zero length: no bulge or squared first frame.
+    const h=x=>clamp(x,l+rl,r-rr),vL=y=>clamp(y,tl+rl,bl-rl),vR=y=>clamp(y,tr+rr,br-rr);
     const d=[
       M(r-rr,tr),
-      C(r-w*.34,tr,l+w*.35,tl,l+rl,tl),
+      C(h(r-w*.34),tr,h(l+w*.35),tl,l+rl,tl),
       C(l+rl*(1-k),tl,l,tl+rl*(1-k),l,tl+rl),
-      C(l,tl+(bl-tl)*.34,l,bl-(bl-tl)*.25,l,bl-rl),
+      C(l,vL(tl+(bl-tl)*.34),l,vL(bl-(bl-tl)*.25),l,bl-rl),
       C(l,bl-rl*(1-k),l+rl*(1-k),bl,l+rl,bl),
-      C(l+w*.35,bl,r-w*.32,br,r-rr,br),
+      C(h(l+w*.35),bl,h(r-w*.32),br,r-rr,br),
       C(r-rr*(1-k),br,r,br-rr*(1-k),r,br-rr),
-      C(r,br-(br-tr)*.33,r,tr+(br-tr)*.33,r,tr+rr),
+      C(r,vR(br-(br-tr)*.33),r,vR(tr+(br-tr)*.33),r,tr+rr),
       C(r,tr+rr*(1-k),r-rr*(1-k),tr,r-rr,tr),"Z"
     ].join(" ");
     return `path("${d}")`;
@@ -174,9 +177,11 @@
     const at="translate(0px,0px)",full="inset(0px 0px 0px 0px round 12px)";
     // Width, leading/trailing heights and source displacement follow
     // the approved demo: narrow connected stream, then diagonal fill.
+    const seedRadius=Math.min(sw,sh)/2;
     const points=[
-      [0,sw,sy,sy,seedBottom,seedBottom,sw/2,sw/2,1,1,0],
-      [.12,Math.max(sw,width*.18),sy,sy,seedBottom,seedBottom,9,8,1,1,1],
+      [0,sw,sy,sy,seedBottom,seedBottom,seedRadius,seedRadius,1,1,0],
+      [.07,sw,sy,sy,seedBottom,seedBottom,seedRadius,seedRadius,1,1,1],
+      [.12,Math.max(sw,width*.18),sy,sy,seedBottom,seedBottom,seedRadius,seedRadius,1,1,1],
       [.27,Math.max(sw,width*.66),sy*.5,sy,seedBottom,seedBottom,12,7,.78,.8,1],
       [.40,width,0,sy,Math.max(seedBottom,height*.10),seedBottom,12,7,.64,.6,1],
       [.53,width,0,sy*.5,Math.max(seedBottom,height*.365),Math.max(seedBottom,height*.10),12,9,.30,.3,1],
@@ -197,9 +202,22 @@
     const out=frames.filter(f=>f.offset<p).reverse().map(f=>({...f,offset:p>0?(p-f.offset)/p:1}));
     return out;
   }
+  function updateOverlayMask(r){
+    if(!overlayLayer)return;
+    // The wave lives in its own viewport layer. Its outer mask stops
+    // exactly at the visible inner edge of native Zen's toolbox.
+    // No changes to the browser's own stacking order or toolbar CSS.
+    const native=!!node?.hasAttribute("data-zr-native")&&!!observedSidebar?.isConnected;
+    const w=window.innerWidth,edge=clamp(r.edge,0,w);
+    const left=native&&r.side==="left"?edge:0;
+    const right=native&&r.side==="right"?w-edge:0;
+    setVar(overlayLayer,"--zr-mask-left",left+"px");
+    setVar(overlayLayer,"--zr-mask-right",right+"px");
+  }
   function positionOverlays(following=false){
     if(!node||!dock||(!cardOpen&&!dockOpen&&current()>=overlayUntil))return;
     const r=dockRect(following),w=window.innerWidth,h=window.innerHeight,right=r.side==="right";
+    updateOverlayMask(r);
     const width=Math.min(OVERLAY_WIDTH,Math.max(1,w-12));
     const x=clamp(right?r.edge-width-8:r.edge+8,6,w-width-6);
     // Both modes share the same top and x. Full mode fills the remaining
@@ -211,7 +229,7 @@
     if(!following||!dockHeight)dockHeight=dock.offsetHeight||Math.max(1,h-y-12);
     setVar(dockBackdrop,"--zr-outside-left",(right?0:Math.max(0,r.edge))+"px");
     setVar(dockBackdrop,"--zr-outside-right",(right?Math.max(0,w-r.edge):0)+"px");
-    return panelGeometry(r,width,dockHeight,x,y);
+    return following?undefined:panelGeometry(r,width,dockHeight,x,y);
   }
   function cancelPanel(){
     ++panelToken;entering=false;
@@ -279,7 +297,7 @@
     }
     // Cache the last visible location on structural/visibility changes.
     if(cardOpen||dockOpen||current()<overlayUntil){positionOverlays();follow();}
-    else dockRect();
+    else updateOverlayMask(dockRect());
     if(flight&&(changed||(oldSide&&oldSide!==side()))){cancelFlight();openCard();}
   }
   function scheduleMount(){
@@ -309,13 +327,18 @@
     speed=make("span","zr-download-speed");
     icon=make("span","zr-download-icon");icon.setAttribute("aria-hidden","true");
     const [track,f]=makeTrack();fill=f;node.append(speed,icon,track);
-    node.addEventListener("click",()=>{cancelFlight();if(dockOpen)closeDock();else if(cardOpen)closeCard();else openCard();});
+    node.addEventListener("click",()=>{
+      cancelFlight();
+      if(dockOpen||cardOpen&&manualHold)closeDock();
+      else if(cardOpen)pinPanel();
+      else openCard(true);
+    });
     buildDock();
     resizeObserver=typeof ResizeObserver==="function"?new ResizeObserver(scheduleMount):null;
     mount();
     layoutObserver=new MutationObserver(records=>{
       if(records.some(r=>{
-        if(r.target===node||r.target===dock||r.target===dockBackdrop||node.contains(r.target)||dock?.contains(r.target))return false;
+        if(r.target===node||r.target===dock||r.target===dockBackdrop||r.target===overlayLayer||node.contains(r.target)||dock?.contains(r.target))return false;
         const selector="#navigator-toolbox,#zen-sidebar-top-buttons,#zen-tabs-wrapper,#tabbrowser-tabs,#oneplane-download-indicator-slot";
         const relevant=n=>n?.nodeType===1&&(n.matches?.(selector)||n.querySelector?.(selector));
         if(r.type==="attributes")return r.target===root||r.target===observedSidebar||r.target===anchor||r.target.matches?.(selector);
@@ -362,9 +385,11 @@
     dockMore.hidden=true;
     dock.append(header,dockSort,dockList,dockEmpty,dockMore,dockNotice);
     dock.addEventListener("click",e=>{if(cardOpen&&!e.target.closest?.("button")&&e.target.closest?.(".zr-dock-row,.zr-dock-title"))openDock(true);});
+    dock.addEventListener("pointerdown",e=>{if(cardOpen&&e.button===0&&!e.target.closest?.(".zr-dock-close"))pinPanel();});
     dock.addEventListener("pointerenter",cancelHide);
     dock.addEventListener("pointerleave",()=>armHide(true));
-    root.append(dockBackdrop,dock);updateSort();
+    overlayLayer=make("div","zr-download-layer");overlayLayer.id="zr-download-layer";
+    overlayLayer.append(dock);root.append(dockBackdrop,overlayLayer);updateSort();
   }
   function updateSort(){
     for(const [button,key,title] of [[sortTime,"time","Time"],[sortSize,"size","Size"]]){
@@ -410,7 +435,7 @@
     }
   }
   function outsideDock(e){
-    if(!dockOpen)return;
+    if(!dockOpen&&!(cardOpen&&manualHold))return;
     const path=e.composedPath?.()||[];
     if(path.includes(dock)||path.includes(node)||dock.contains(e.target)||node.contains(e.target))return;
     closeDock();
@@ -431,7 +456,7 @@
     dock.inert=true;dock.setAttribute("aria-hidden","true");
     node?.setAttribute("aria-expanded","false");updateLive();
     if(restoreFocus&&visible(node))node.focus?.({preventScroll:true});
-    const done=()=>{dock?.removeAttribute("data-closing");syncSidebarHold();};
+    const done=()=>{dock?.removeAttribute("data-closing");manualHold=false;syncSidebarHold();};
     if(!g||progress<=0){done();return;}
     const reverse=reverseWave(g.frames,progress);
     const start=progress<1&&startClip.startsWith("path(")?
@@ -453,6 +478,7 @@
   function openDock(){
     if(!dock||dead||dockOpen)return;
     cancelHide();cancelFlight();
+    manualHold=true;
     const wasRecent=cardOpen;
     const before=wasRecent?{height:dock.offsetHeight,listY:dockList.getBoundingClientRect().top}:null;
     const keyboardFocus=document.activeElement===allButton;
@@ -576,25 +602,30 @@
     cancelHide();
     // Pointer alone controls the recent timeout; button focus must not
     // keep it alive after the mouse leaves. Full mode never auto-dismisses.
-    if(!cardOpen||entering||(!pointerLeft&&dock?.matches(":hover")))return;
-    hideTimer=window.setTimeout(()=>{hideTimer=0;if(cardOpen&&!dock.matches(":hover"))closeDock();},HOLD);
+    if(!cardOpen||manualHold||entering||(!pointerLeft&&dock?.matches(":hover")))return;
+    hideTimer=window.setTimeout(()=>{hideTimer=0;if(cardOpen&&!manualHold&&!dock.matches(":hover"))closeDock();},HOLD);
   }
   function onKey(e){if(e.key==="Escape"){if(dockOpen&&confirming&&!clearing)setConfirm(false,true);else if(dockOpen||cardOpen)closeDock(true);}}
   function closeCard(){if(cardOpen)closeDock();}
   function syncSidebarHold(){
     // Zen watches native sidebar descendants with [panelopen] and
     // owns zen-compact-mode-active. We own only our button's attribute.
-    const hold=!dead&&!!node?.hasAttribute("data-zr-native")&&!!(cardOpen||dockOpen||dock?.hasAttribute("data-closing"));
+    const hold=!dead&&manualHold&&!!node?.hasAttribute("data-zr-native")&&!!(cardOpen||dockOpen||dock?.hasAttribute("data-closing"));
     if(node&&node.hasAttribute("panelopen")!==hold)node.toggleAttribute("panelopen",hold);
   }
   function updateLive(){
     node?.toggleAttribute("data-live",snapshot.active>0||cardOpen||dockOpen||!!flight);
     syncSidebarHold();
   }
-  function openCard(){
+  function pinPanel(){
+    if(!cardOpen&&!dockOpen)return;
+    manualHold=true;cancelHide();syncSidebarHold();follow(800);
+  }
+  function openCard(manual=false){
     if(!dock||!node||dead||dockOpen)return;
-    if(cardOpen){renderRecent();armHide();return;}
-    cancelHide();cancelPanel();dock.removeAttribute("data-closing");
+    if(cardOpen){if(manual)pinPanel();renderRecent();armHide();return;}
+    if(!manual&&dock.hasAttribute("data-closing"))return;
+    cancelHide();cancelPanel();dock.removeAttribute("data-closing");manualHold=manual;
     dockNotice.textContent="";setPanelMode(false);syncTheme(dock);updateLive();
     const g=positionOverlays();
     dock.setAttribute("data-open","true");dock.setAttribute("aria-hidden","false");dock.inert=false;
@@ -609,12 +640,12 @@
   }
   function launchFlight(){
     if(dead||!node)return;
-    cancelFlight();if(dockOpen)return;if(cardOpen){renderRecent();armHide();return;}mount();
+    cancelFlight();if(dockOpen||dock?.hasAttribute("data-closing"))return;if(cardOpen){renderRecent();armHide();return;}mount();
     const activeWindow=!document.hasFocus||document.hasFocus();
     if(!activeWindow)return;
     node.setAttribute("data-live","true");
     if(reduced.matches){openCard();return;}
-    const r=dockRect(),tx=r.x,ty=r.y;
+    const r=dockRect(),tx=r.x,ty=r.y;updateOverlayMask(r);
     const native=window.gZenUIManager?._lastClickPosition;
     const click=lastClick&&current()-lastClick.at<5000?lastClick:
       native&&Number.isFinite(native.clientX)&&Number.isFinite(native.clientY)?{x:native.clientX,y:native.clientY}:null;
@@ -624,7 +655,7 @@
     const token=flightToken;
     flight=make("span","zr-download-flight");flight.setAttribute("aria-hidden","true");
     const glyph=make("span","zr-download-icon");flight.append(glyph);
-    flight.style.setProperty("left",x+"px");flight.style.setProperty("top",y+"px");root.append(flight);syncTheme(flight);
+    flight.style.setProperty("left",x+"px");flight.style.setProperty("top",y+"px");overlayLayer.append(flight);syncTheme(flight);
     try{
       // A short compositor-friendly curved flight; no frame callbacks,
       // no bouncing, and the card opens only after it reaches the icon.
@@ -694,7 +725,7 @@
   function removed(d){if(history.delete(d)){historyOrder=null;recentOrder=null;}if(batch.delete(d)){if(latest===d)latest=null;schedule(true);}else if(dockOpen||cardOpen)schedule();}
   function teardown(){
     ++epoch;
-    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();cancelPanel();cardOpen=dockOpen=false;dock?.removeAttribute("data-closing");syncSidebarHold();stopFollow();overlayUntil=0;
+    if(updateTimer)window.clearTimeout(updateTimer);updateTimer=0;cancelHide();cancelFlight();cancelPanel();cardOpen=dockOpen=false;manualHold=false;dock?.removeAttribute("data-closing");syncSidebarHold();stopFollow();overlayUntil=0;
     if(layoutFrame)window.cancelAnimationFrame(layoutFrame);layoutFrame=0;
     resizeObserver?.disconnect();resizeObserver=null;observedSidebar=anchor=null;
     if(list&&view)try{list.removeView(view);}catch{}
@@ -707,7 +738,7 @@
     try{prefs.removeObserver(SIDE,scheduleMount);}catch{}
     try{prefs.removeObserver(STATS_PREF,refreshStatistics);}catch{}
     node?.remove();node=fill=speed=icon=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
-    dock?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=null;history.clear();rows.clear();historyOrder=recentOrder=null;limit=30;dockHeight=0;allButton=dockTitle=dockSort=null;
+    dock?.remove();overlayLayer?.remove();dockBackdrop?.remove();dock=dockList=dockEmpty=dockMore=dockBackdrop=dockNotice=overlayLayer=null;history.clear();rows.clear();historyOrder=recentOrder=null;limit=30;dockHeight=0;allButton=dockTitle=dockSort=null;
     sortKey="time";sortDir=-1;headerNormal=headerConfirm=clearButton=sortTime=sortSize=yesButton=noButton=null;confirming=clearing=false;
     snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"});
     root.removeAttribute(ACTIVE);root.removeAttribute("data-zr-downloads-native");lastDockRect=null;

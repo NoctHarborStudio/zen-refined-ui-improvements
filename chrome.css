@@ -259,6 +259,12 @@
   #zr-page-progress[data-indeterminate] .zr-page-progress-fill { opacity:.65; }
 }
 
+/* Content-side mask: fluid motion emerges from underneath native Zen. */
+#zr-download-layer {
+  position:fixed !important;inset:0 !important;
+  z-index:2147483002 !important;pointer-events:none !important;
+  clip-path:inset(0 var(--zr-mask-right,0px) 0 var(--zr-mask-left,0px));
+}
 /* Custom downloads dock: separate root overlay, native list is unchanged. */
 #zr-download-outside {
   position:fixed !important;

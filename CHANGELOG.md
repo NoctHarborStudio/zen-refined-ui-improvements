@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0-preview.12
+
+- Mask the fluid wave and flight at the native sidebar edge so they emerge from behind it; use a circular seed with bounded cubic control points.
+- Automatic download notifications no longer hold or expand Compact Mode. Explicit clicks pin Recent downloads or full Downloads until dismissed; automatic Recent mode keeps its two-second pointer timeout.
+- Keep native sidebar hold through the manual closing wave, release afterward, and avoid calculating wave paths on geometry-follow frames.
+
 ## 0.6.0-preview.11
 
 - Republish preview.10 with a newer full UTC timestamp for Sine update detection. No runtime changes.
