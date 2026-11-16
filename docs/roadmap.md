@@ -75,3 +75,7 @@ Grow from a subpixel point at the inner sidebar boundary, keep a real painted br
 ### Smart Search preview.18
 
 Fix native module registration after preview.17 user report of no visible change with and without OnePlane. Real browser verification pending; do not mark accepted until results appear and switch correctly.
+
+## Shared floating search surface — approved 2026-11-16
+
+User screenshot shows the native central floating search near-black while OnePlane uses muted blue-gray chrome. Requested matching color/translucency in both OnePlane and standalone Zen Refined. Add theme-aware native floating URL-bar styling to the visual consistency pipeline. Refined owns the reusable surface styling; OnePlane consumes compatible toolbar tokens and provides standalone fallback if Refined is absent. One effective owner when both enabled; avoid competing opacity, blur or backdrop overrides. Use controlled translucency, theme-derived color and readable fallback if OS material is unavailable; preserve native suggestions, Smart Search, focus/security cues and keyboard navigation. Validate ordinary startup, Ctrl+T, projected workspace, dark/light themes, Nebula on/off, both standalone and combined, multi-monitor and unload. No changes to approved Center Assembly/Disassembly. Visual design queued, not implemented.

@@ -26,3 +26,11 @@ Baseline: `0.6.0-preview.15`. Distinguish reported behavior from compatibility r
 ## Deferred design idea
 
 A reverse browser-window closing animation is not a known defect and is tracked only in the [roadmap](roadmap.md).
+
+### Floating search color/translucency
+
+User reports near-black native search inconsistent with blue-gray toolbar; shared design approved in both roadmaps. Deferred implementation; preserve native search behavior.
+
+### Smart Search registration on preview.17
+
+User console confirms legacy resource:///modules/sessionstore/SessionStore.sys.mjs import failed on Zen 1.24.2b while installed Refined is .17. Already addressed by .18 using canonical moz-src module and optional fallback. Actual .18 registration/results require user confirmation. Do not infer a new .18 failure from the .17 log.
