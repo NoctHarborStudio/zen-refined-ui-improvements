@@ -96,7 +96,7 @@
     "property": "zen.refined.startup.animation-duration",
     "label": "Startup animation duration",
     "value": "number",
-    "defaultValue": 760,
+    "defaultValue": 1050,
     "placeholder": false,
     "options": [
       {
@@ -114,6 +114,18 @@
       {
         "label": "1000 ms",
         "value": 1000
+      },
+      {
+        "label": "1050 ms",
+        "value": 1050
+      },
+      {
+        "label": "1250 ms",
+        "value": 1250
+      },
+      {
+        "label": "1500 ms",
+        "value": 1500
       }
     ]
   }

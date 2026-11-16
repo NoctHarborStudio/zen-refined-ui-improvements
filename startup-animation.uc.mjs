@@ -15,14 +15,19 @@
   window[SEEN]=true;
   if(!prefs.getBoolPref(ENABLE,true)||reduced.matches||now()>4000||window.closed||
       root.hasAttribute("customizing")||root.getAttribute("inDOMFullscreen")==="true")return;
-  const duration=Math.max(400,Math.min(1100,prefs.getIntPref(DURATION,760)));
-  const scale=duration/760;
+  const duration=Math.max(400,Math.min(1500,prefs.getIntPref(DURATION,1050)));
+  const scale=duration/1050;
   const started=now(),deadline=started+2400;
   let dead=false,playing=false,raf=0,timer=0,settled=false,nativeReady=false,readyAt=0,holdNode=null;
-  let nativeObserver=null,cover=null,pageVeil=null,style=null;
-  const animations=new Set();
+  let nativeObserver=null,cover=null,pageVeil=null,style=null,lateObserver=null,lateFrame=0,playStart=0,finishAt=0;
+  const animations=new Set(),owned=new Map(),seen=new Set();
+  const MANAGED="data-zr-startup-managed",PROGRESS="--zr-startup-progress";
+  let registered=false;
+  try{window.CSS.registerProperty({name:PROGRESS,syntax:"<number>",inherits:false,initialValue:"1"});registered=true;}
+  catch(e){registered=e.name==="InvalidModificationError";}
   const inputs=["pointerdown","keydown","wheel","dragstart","beforecustomization"];
-  const EASE="cubic-bezier(.22,.8,.22,1)";
+  const EASE="cubic-bezier(.33,0,.22,1)";
+  const FADE="cubic-bezier(.32,.12,.3,1)";
   function hold(){
     const w=get("zen-appcontent-navbar-wrapper");
     if(w&&w!==holdNode){
@@ -34,10 +39,15 @@
     if(dead)return;dead=true;
     if(raf)window.cancelAnimationFrame(raf);
     if(timer)window.clearTimeout(timer);
+    if(lateFrame)window.cancelAnimationFrame(lateFrame);
+    lateObserver?.disconnect();lateObserver=null;
     if(nativeObserver)try{Services.obs.removeObserver(nativeObserver,"browser-delayed-startup-finished");}catch{}
     nativeObserver=null;
     for(const a of animations)try{a.cancel();}catch{}
     animations.clear();
+    for(const n of [...owned.keys()])restore(n);
+    for(const n of seen)n.removeAttribute(MANAGED);
+    seen.clear();
     cover?.remove();pageVeil?.remove();style?.remove();
     root.removeAttribute(PHASE);holdNode?.removeAttribute(HOLD);
     for(const type of inputs)window.removeEventListener(type,interrupt,true);
@@ -60,33 +70,142 @@
       n.style.setProperty(k,v,"important");
     root.append(n);return n;
   }
-  function bounds(n){
+  function bounds(n,ignoreOpacity=false){
     if(!n||n.hidden||n.collapsed)return null;
     const s=window.getComputedStyle(n),r=n.getBoundingClientRect();
-    return s.display!=="none"&&s.visibility!=="hidden"&&Number(s.opacity)!==0&&r.width>1&&r.height>1&&
+    return s.display!=="none"&&s.visibility!=="hidden"&&(ignoreOpacity||Number(s.opacity)!==0)&&r.width>1&&r.height>1&&
       r.right>0&&r.left<window.innerWidth&&r.bottom>0&&r.top<window.innerHeight?r:null;
   }
-  function play(n,frames,delay,length,retain=false){
-    if(!n)return;
+  function play(n,frames,delay,length,retain=false,easing=EASE,complete=null){
+    if(!n)return false;
     try{
-      const a=n.animate(frames,{delay:delay*scale,duration:length*scale,easing:EASE,fill:"both"});
+      const a=n.animate(frames,{delay,duration:length,easing,fill:"both"});
       animations.add(a);
-      // Release the native control immediately at its own endpoint. A
-      // retained clip could clip its popover or focus outline until the
-      // whole timeline ends. Only veils retain their transparent state.
-      if(!retain)a.finished?.then(()=>{if(animations.delete(a))a.cancel();},()=>{});
-    }catch(error){console.warn("[Zen Refined] Startup animation effect:",error);}
+      a.finished?.then(()=>{
+        if(dead||!animations.has(a)||retain)return;
+        animations.delete(a);
+        try{a.cancel();}catch{}
+        complete?.();
+      },()=>{});
+      return true;
+    }catch(error){console.warn("[Zen Refined] Startup animation effect:",error);return false;}
   }
-  function slide(n,x,y,delay,length,opacity=true){
-    // Independent translate avoids replacing an existing native transform.
-    const a={translate:x+"px "+y+"px"},b={translate:"0px 0px"};
-    if(opacity){a.opacity=0;b.opacity=Number(window.getComputedStyle(n).opacity)||1;}
-    play(n,[a,b],delay,length);
+  function save(n,k,value){
+    let record=owned.get(n);
+    if(!record){record=new Map();owned.set(n,record);}
+    if(!record.has(k))record.set(k,{value:n.style.getPropertyValue(k),priority:n.style.getPropertyPriority(k)});
+    n.style.setProperty(k,value,"important");
   }
-  function openFromCenter(n,delay,length){
-    // Clip the native control, not its layout width. At completion the
-    // effect is removed, preserving Zen's own address expansion/popover.
-    play(n,[{clipPath:"inset(0 48% 0 48% round 8px)"},{clipPath:"inset(0 -2px 0 -2px round 8px)"}],delay,length);
+  function restore(n){
+    const record=owned.get(n);if(!record)return;
+    for(const [k,v] of record){
+      if(v.value)n.style.setProperty(k,v.value,v.priority);else n.style.removeProperty(k);
+    }
+    owned.delete(n);
+  }
+  function reveal(n,{x=0,y=0,clip=false,delay=0,length=350,easing=EASE,late=false}={}){
+    if(!n||seen.has(n)||!bounds(n,true))return false;
+    // Remove the pending gate before sampling native opacity. All changes
+    // occur synchronously, before the next paint.
+    n.setAttribute(MANAGED,"true");
+    const cs=window.getComputedStyle(n),opacity=Number(cs.opacity);
+    if(!Number.isFinite(opacity)||opacity<=0){n.removeAttribute(MANAGED);return false;}
+    seen.add(n);
+    const nativeTranslate=cs.translate||"none";
+    const canMove=nativeTranslate==="none"||/^0(?:px|%)?(?: 0(?:px|%)?){0,2}$/.test(nativeTranslate);
+    // Do not replace a nonzero native translation (notably the floating
+    // URL bar). Clip and fade the actual popup instead.
+    if(!canMove){x=0;y=0;}
+    const start=late?0:Math.max(0,delay*scale);
+    const time=late?Math.max(240,Math.min(length*scale,finishAt-now()-60)):length*scale;
+    if(late)extendFinish(now()+time+65);
+    if(registered){
+      // Important theme opacity/translate/clip-path declarations defeat
+      // ordinary animation effects. Animate a registered number instead;
+      // important inline properties consume that same interpolated value.
+      // The custom property itself must NOT be important.
+      let record=owned.get(n);if(!record){record=new Map();owned.set(n,record);}
+      record.set(PROGRESS,{value:n.style.getPropertyValue(PROGRESS),priority:n.style.getPropertyPriority(PROGRESS)});
+      n.style.setProperty(PROGRESS,"1");
+      save(n,"opacity","calc("+opacity+" * var("+PROGRESS+"))");
+      if(x||y)save(n,"translate","calc("+x+"px * (1 - var("+PROGRESS+"))) calc("+y+"px * (1 - var("+PROGRESS+")))");
+      if(clip){
+        const edge="calc(49% * (1 - var("+PROGRESS+")) - 8px * var("+PROGRESS+"))";
+        save(n,"clip-path","inset(-8px "+edge+" -8px "+edge+" round 8px)");
+      }
+      if(!play(n,[{[PROGRESS]:"0"},{[PROGRESS]:"1"}],start,time,false,easing,()=>restore(n)))restore(n);
+    }else{
+      const from={opacity:0},to={opacity};
+      if(x||y){from.translate=x+"px "+y+"px";to.translate="0px 0px";}
+      if(clip){from.clipPath="inset(0 49% 0 49% round 8px)";to.clipPath="inset(-8px round 8px)";}
+      play(n,[from,to],start,time,false,easing);
+    }
+    return true;
+  }
+  function extendFinish(until){
+    // Late chrome may get a short reveal but cannot keep the startup hold
+    // forever. All cleanup is still guaranteed by the final timer.
+    const end=Math.min(playStart+duration+420,Math.max(finishAt,until));
+    if(end===finishAt)return;
+    finishAt=end;
+    if(timer)window.clearTimeout(timer);
+    timer=window.setTimeout(finish,Math.max(0,finishAt-now()));
+  }
+  function slide(n,x,y,delay,length){return reveal(n,{x,y,delay,length});}
+  function openFromCenter(n,delay,length,late=false){return reveal(n,{clip:true,delay,length,late,easing:FADE});}
+  function floatingBar(){
+    const bar=get("urlbar");
+    if(!bar)return null;
+    const r=bounds(bar,true);
+    // Some Zen builds mark the floating bar later than the actual layout.
+    // A real input centered well below the toolbar is also a valid target.
+    return bar.getAttribute("zen-floating-urlbar")==="true"||bar.hasAttribute("zen-newtab")||
+      (r&&r.top>100&&r.width>100)?bar:null;
+  }
+  function controls(row,url,center,one){
+    const nav=get("nav-bar"),target=get("nav-bar-customization-target"),candidates=new Set();
+    const eligible=n=>n&&n!==row&&n!==url&&!row?.contains(n)&&!url?.contains(n)&&
+      n.localName!=="toolbarspring"&&!n.id?.startsWith("oneplane-center-")&&bounds(n,true);
+    // Native captions are moved outside customization-target by OnePlane.
+    // Include the actual buttons, not the parent and child simultaneously.
+    let captions=null;try{captions=window.gZenVerticalTabsManager?.actualWindowButtons;}catch{}
+    const buttonSelector="toolbarbutton,button,.titlebar-button,[role=button]";
+    const roots=[target,nav,captions,get("titlebar-buttonbox"),get("titlebar-buttonbox-container"),get("zen-window-controls")].filter(Boolean);
+    for(const parent of roots){
+      for(const n of parent.querySelectorAll(buttonSelector))if(eligible(n))candidates.add(n);
+    }
+    for(const n of Array.from(target?.children||[]))if(eligible(n)&&![...candidates].some(c=>c!==n&&n.contains(c)))candidates.add(n);
+    const leaves=[...candidates].filter(n=>![...candidates].some(c=>c!==n&&n.contains(c)));
+    const left=[],right=[];
+    for(const n of leaves){
+      const r=bounds(n,true);if(!r)continue;
+      (r.left+r.width/2<center?left:right).push({n,r});
+    }
+    left.sort((a,b)=>b.r.left-a.r.left);right.sort((a,b)=>a.r.left-b.r.left);
+    for(const [side,group] of [[-1,left],[1,right]])for(let i=0;i<group.length;i++){
+      const {n}=group[i];
+      slide(n,-side*14,-4,260+Math.min(i*32,160),390);
+    }
+  }
+  function revealBookmarks(center,late=false){
+    const items=get("PlacesToolbarItems");
+    const visible=Array.from(items?.children||[]).map(n=>({n,r:bounds(n,true)})).filter(x=>x.r);
+    if(!visible.length)return;
+    const bmCenter=(Math.min(...visible.map(x=>x.r.left))+Math.max(...visible.map(x=>x.r.right)))/2;
+    const max=Math.max(1,...visible.map(x=>Math.abs(x.r.left+x.r.width/2-bmCenter)));
+    for(const {n,r} of visible){
+      const dx=Math.abs(r.left+r.width/2-bmCenter);
+      reveal(n,{x:0,y:-16,delay:430+dx/max*115,length:430,easing:FADE,late});
+    }
+  }
+  function scheduleLate(){
+    if(dead||!playing||lateFrame)return;
+    lateFrame=window.requestAnimationFrame(()=>{
+      lateFrame=0;if(dead)return;
+      const bar=floatingBar();
+      if(bar&&!seen.has(bar))openFromCenter(bar,0,400,true);
+      revealBookmarks(window.innerWidth/2,true);
+    });
   }
   function collectTabs(row,center){
     const list=row.querySelector(".oneplane-tab-list"),units=[];
@@ -107,7 +226,7 @@
     try{
       const row=get("oneplane-tabs"),url=get("urlbar-container"),bar=get("urlbar");
       const nav=get("nav-bar"),bookmarks=get("PersonalToolbar"),items=get("PlacesToolbarItems");
-      const floating=bar?.getAttribute("zen-floating-urlbar")==="true"||bar?.hasAttribute("zen-newtab");
+      const floating=floatingBar();
       const page=get("tabbrowser-tabpanels")||get("tabbrowser-tabbox");
       const ur=bounds(url),nr=bounds(nav),br=bounds(bookmarks),rr=one?bounds(row):null;
       const island=one?row?.querySelector(".oneplane-title-island"):null,ir=bounds(island);
@@ -119,48 +238,39 @@
       pageVeil=veil("zr-startup-page-veil");
       const top=Math.max(0,bottom,pr?.top||0);
       pageVeil.style.setProperty("clip-path","inset("+top+"px 0 0 0)","important");
+      playStart=now();finishAt=playStart+duration+80;
       root.setAttribute(PHASE,"playing");
-      if(ur&&(!floating||url.hasAttribute("data-op-empty")))openFromCenter(url,40,270);
+      // The native floating field may be a top-layer popover; never clip
+      // its parent during its independent entrance.
+      if(ur&&!floating)openFromCenter(url,45,410);
       if(one&&rr){
         const tabs=collectTabs(row,center),far=Math.max(1,...tabs.map(x=>x.distance));
         for(const t of tabs){
           // Every real tab/group begins near the central anchor and fans
           // outward. Distance controls timing, not a fixed tab count.
           const dx=Math.max(-360,Math.min(360,center-t.mid));
-          slide(t.n,dx,0,125+Math.min(105,t.distance/far*105),290);
+          slide(t.n,dx,0,155+Math.min(150,t.distance/far*150),435);
         }
-        const plus=row.querySelector(".oneplane-new-tab");if(bounds(plus))slide(plus,-26,0,265,240);
-        if(ir)openFromCenter(island,40,270);
-        const target=get("nav-bar-customization-target");
-        for(const n of Array.from(target?.children||[])){
-          if(n===row||n===url||n.localName==="toolbarspring"||n.id?.startsWith("oneplane-center-")||!bounds(n))continue;
-          slide(n,0,-8,190,250);
-        }
+        const plus=row.querySelector(".oneplane-new-tab");if(bounds(plus))slide(plus,-26,0,340,390);
+        if(ir)openFromCenter(island,45,410);
       }else{
-        // Native Zen: never rearrange the sidebar or force horizontal tabs.
         const sidebar=get("zen-tabs-wrapper")||get("TabsToolbar");
-        const sr=bounds(sidebar);
-        if(sr)slide(sidebar,sr.left<window.innerWidth/2?-18:18,0,120,310);
-        const target=get("nav-bar-customization-target");
-        for(const n of Array.from(target?.children||[])){
-          if(n===url||!bounds(n)||n.localName==="toolbarspring")continue;
-          slide(n,0,-8,190,250);
-        }
+        const sr=bounds(sidebar);if(sr)slide(sidebar,sr.left<window.innerWidth/2?-18:18,0,155,445);
       }
-      // Bookmarks retain their native positions and magnification logic;
-      // this one-shot vertical entry does not alter margins or sizes.
-      const visible=Array.from(items?.children||[]).map(n=>({n,r:bounds(n)})).filter(x=>x.r);
-      const bmCenter=visible.length?(visible[0].r.left+visible.at(-1).r.right)/2:center;
-      for(const {n,r} of visible){
-        const offset=Math.min(65,Math.abs(r.left+r.width/2-bmCenter)*.12);
-        slide(n,0,-11,310+offset,250);
-      }
-      if(floating&&bounds(bar))openFromCenter(bar,425,310);
+      controls(row,url,center,one);
+      revealBookmarks(center);
+      if(floating)openFromCenter(floating,590,440);
+      // Places and Zen's floating input can initialize after chrome-ready.
+      // Keep only these late nodes gated until they receive their effect.
+      lateObserver=new MutationObserver(scheduleLate);
+      lateObserver.observe(root,{subtree:true,childList:true,attributes:true,
+        attributeFilter:["zen-floating-urlbar","zen-newtab","hidden","collapsed","open","popover-open"]});
+      scheduleLate();
       // Background reveals first; content stays veiled until chrome is in
       // motion. Nothing waits for network loads, remote DOM or a page FCP.
-      play(pageVeil,[{opacity:1},{opacity:0}],390,340,true);
-      play(cover,[{opacity:1},{opacity:0}],0,130,true);
-      timer=window.setTimeout(finish,duration+90);
+      play(pageVeil,[{opacity:1},{opacity:0}],470*scale,460*scale,true,FADE);
+      play(cover,[{opacity:1},{opacity:0}],0,230*scale,true,FADE);
+      timer=window.setTimeout(finish,Math.max(0,finishAt-now()));
     }catch(error){console.warn("[Zen Refined] Startup reveal failed:",error);finish();}
   }
   function schedule(){
@@ -209,7 +319,12 @@
     prefs.addObserver(ENABLE,preferenceChanged);
     // The early cover masks ordinary chrome. A floating native search is
     // in Gecko's top layer, so clip it during the waiting phase separately.
-    style=html("style");style.textContent=':root[data-zr-startup-phase="waiting"] #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]) { clip-path: inset(50% 50% 50% 50%) !important; }';
+    style=html("style");style.textContent=`
+      :root[data-zr-startup-phase] #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed]),
+      :root[data-zr-startup-phase="playing"] #PlacesToolbarItems > :not([data-zr-startup-managed]) {
+        opacity: 0 !important;
+      }
+    `;
     root.append(style);root.setAttribute(PHASE,"waiting");cover=veil("zr-startup-cover");hold();
     timer=window.setTimeout(finish,2400);
     if(window.gBrowserInit?.delayedStartupFinished)onNativeReady();

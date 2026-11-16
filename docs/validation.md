@@ -72,3 +72,10 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Zen Refined alone: native sidebar/toolbar, no required OnePlane. OnePlane alone: unchanged normal startup. Old OnePlane: visible layout fallback or fail-open.
 - [ ] Slow or rejected native initialization, absent/missing controls, unload, resize, pointer/key/wheel input, disabled setting, reduced motion, multiple windows, hot reload: no retained overlay, hold, or animation effects.
 - [ ] Actual Zen/Sine cold-start timing, floating new-tab search/popover, restored sites, persistent and Compact Mode, narrow window, split groups and island mode. No page load waiting, no screenshot, no changes to session or browser preferences.
+
+## 0.5.0-preview.2 — softer assembly and full chrome coverage
+
+- [ ] Default 1050 ms; check preserved explicit duration choices. Tab fan, edge controls, bookmark wave and floating search have distinct overlapping timing.
+- [ ] Real floating #urlbar reveals independently without overwriting its native positioning. Verify the top-layer popup and late `zen-newtab`/`zen-floating-urlbar` attributes.
+- [ ] Navigation, compact/sidebar, extensions, page actions and actual minimize/maximize/close controls animate once, without nested parent/child effects. Disabled opacity and original inline styles restore.
+- [ ] Important theme declarations do not block progress-driven reveal. Late Places children receive their own animation; bounded cleanup restores all unowned styles and releases the panel hold on input/unload/timeout.
