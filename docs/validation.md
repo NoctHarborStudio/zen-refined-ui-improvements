@@ -79,3 +79,5 @@ Known limitations of the untested preview: native overflow measurements can vary
 - [ ] Real floating #urlbar reveals independently without overwriting its native positioning. Verify the top-layer popup and late `zen-newtab`/`zen-floating-urlbar` attributes.
 - [ ] Navigation, compact/sidebar, extensions, page actions and actual minimize/maximize/close controls animate once, without nested parent/child effects. Disabled opacity and original inline styles restore.
 - [ ] Important theme declarations do not block progress-driven reveal. Late Places children receive their own animation; bounded cleanup restores all unowned styles and releases the panel hold on input/unload/timeout.
+
+- [ ] Confirm temporary sheet uses Gecko USER_SHEET (same cascade origin as Sine), and author/user-important theme declarations cannot prevent the reveal. Verify temporary sheet removal and original attributes/styles after animation or cancellation.

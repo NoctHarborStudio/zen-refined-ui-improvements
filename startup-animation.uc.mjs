@@ -19,9 +19,9 @@
   const scale=duration/1050;
   const started=now(),deadline=started+2400;
   let dead=false,playing=false,raf=0,timer=0,settled=false,nativeReady=false,readyAt=0,holdNode=null;
-  let nativeObserver=null,cover=null,pageVeil=null,style=null,lateObserver=null,lateFrame=0,playStart=0,finishAt=0;
+  let nativeObserver=null,cover=null,pageVeil=null,style=null,lateObserver=null,lateFrame=0,playStart=0,finishAt=0,sheetURI=null;
   const animations=new Set(),owned=new Map(),seen=new Set();
-  const MANAGED="data-zr-startup-managed",PROGRESS="--zr-startup-progress";
+  const MANAGED="data-zr-startup-managed",EFFECT="data-zr-startup-effect",MOVE="data-zr-startup-move",CLIP="data-zr-startup-clip",PROGRESS="--zr-startup-progress";
   let registered=false;
   try{window.CSS.registerProperty({name:PROGRESS,syntax:"<number>",inherits:false,initialValue:"1"});registered=true;}
   catch(e){registered=e.name==="InvalidModificationError";}
@@ -48,6 +48,8 @@
     for(const n of [...owned.keys()])restore(n);
     for(const n of seen)n.removeAttribute(MANAGED);
     seen.clear();
+    if(sheetURI)try{window.windowUtils.removeSheet(sheetURI,window.windowUtils.USER_SHEET);}catch{}
+    sheetURI=null;
     cover?.remove();pageVeil?.remove();style?.remove();
     root.removeAttribute(PHASE);holdNode?.removeAttribute(HOLD);
     for(const type of inputs)window.removeEventListener(type,interrupt,true);
@@ -101,6 +103,7 @@
     for(const [k,v] of record){
       if(v.value)n.style.setProperty(k,v.value,v.priority);else n.style.removeProperty(k);
     }
+    n.removeAttribute(EFFECT);n.removeAttribute(MOVE);n.removeAttribute(CLIP);
     owned.delete(n);
   }
   function reveal(n,{x=0,y=0,clip=false,delay=0,length=350,easing=EASE,late=false}={}){
@@ -116,9 +119,9 @@
     // Do not replace a nonzero native translation (notably the floating
     // URL bar). Clip and fade the actual popup instead.
     if(!canMove){x=0;y=0;}
-    const start=late?0:Math.max(0,delay*scale);
-    const time=late?Math.max(240,Math.min(length*scale,finishAt-now()-60)):length*scale;
-    if(late)extendFinish(now()+time+65);
+    const start=late?Math.max(0,playStart+delay*scale-now()):Math.max(0,delay*scale);
+    const time=late?Math.max(240,Math.min(length*scale,finishAt-now()-start-60)):length*scale;
+    if(late)extendFinish(now()+start+time+65);
     if(registered){
       // Important theme opacity/translate/clip-path declarations defeat
       // ordinary animation effects. Animate a registered number instead;
@@ -127,12 +130,10 @@
       let record=owned.get(n);if(!record){record=new Map();owned.set(n,record);}
       record.set(PROGRESS,{value:n.style.getPropertyValue(PROGRESS),priority:n.style.getPropertyPriority(PROGRESS)});
       n.style.setProperty(PROGRESS,"1");
-      save(n,"opacity","calc("+opacity+" * var("+PROGRESS+"))");
-      if(x||y)save(n,"translate","calc("+x+"px * (1 - var("+PROGRESS+"))) calc("+y+"px * (1 - var("+PROGRESS+")))");
-      if(clip){
-        const edge="calc(49% * (1 - var("+PROGRESS+")) - 8px * var("+PROGRESS+"))";
-        save(n,"clip-path","inset(-8px "+edge+" -8px "+edge+" round 8px)");
-      }
+      save(n,"--zr-startup-base-opacity",String(opacity));
+      n.setAttribute(EFFECT,"true");
+      if(x||y){save(n,"--zr-startup-dx",x+"px");save(n,"--zr-startup-dy",y+"px");n.setAttribute(MOVE,"true");}
+      if(clip)n.setAttribute(CLIP,"true");
       if(!play(n,[{[PROGRESS]:"0"},{[PROGRESS]:"1"}],start,time,false,easing,()=>restore(n)))restore(n);
     }else{
       const from={opacity:0},to={opacity};
@@ -203,7 +204,7 @@
     lateFrame=window.requestAnimationFrame(()=>{
       lateFrame=0;if(dead)return;
       const bar=floatingBar();
-      if(bar&&!seen.has(bar))openFromCenter(bar,0,400,true);
+      if(bar&&!seen.has(bar))openFromCenter(bar,590,440,true);
       revealBookmarks(window.innerWidth/2,true);
     });
   }
@@ -224,7 +225,7 @@
   function launch(one){
     if(dead||playing)return;playing=true;
     try{
-      const row=get("oneplane-tabs"),url=get("urlbar-container"),bar=get("urlbar");
+      const row=get("oneplane-tabs"),url=get("urlbar-container");
       const nav=get("nav-bar"),bookmarks=get("PersonalToolbar"),items=get("PlacesToolbarItems");
       const floating=floatingBar();
       const page=get("tabbrowser-tabpanels")||get("tabbrowser-tabbox");
@@ -319,13 +320,36 @@
     prefs.addObserver(ENABLE,preferenceChanged);
     // The early cover masks ordinary chrome. A floating native search is
     // in Gecko's top layer, so clip it during the waiting phase separately.
-    style=html("style");style.textContent=`
-      :root[data-zr-startup-phase] #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed]),
-      :root[data-zr-startup-phase="playing"] #PlacesToolbarItems > :not([data-zr-startup-managed]) {
+    // Sine applies its chrome CSS at USER_SHEET origin. A user-important
+    // declaration wins over author-important inline styles. Scope our
+    // temporary user sheet to owned nodes and use deliberate specificity
+    // to win over OnePlane's nested IDs. No global prefs or permanent CSS.
+    const specificity=":is(#zr-startup-specificity,[data-zr-startup-effect])".repeat(8);
+    const gate=":is(#zr-startup-specificity,:not([data-zr-startup-managed]))".repeat(8);
+    const base=":root[data-zr-startup-phase] [data-zr-startup-effect]"+specificity;
+    const edge="calc(49% * (1 - var("+PROGRESS+")) - 8px * var("+PROGRESS+"))";
+    const cssText=`
+      :root[data-zr-startup-phase] #urlbar:is([zen-floating-urlbar="true"],[zen-newtab]):not([data-zr-startup-managed])${gate},
+      :root[data-zr-startup-phase="playing"] #PlacesToolbarItems > :not([data-zr-startup-managed])${gate} {
         opacity: 0 !important;
       }
+      ${base} {
+        opacity: calc(var(--zr-startup-base-opacity) * var(${PROGRESS})) !important;
+      }
+      ${base}[data-zr-startup-move] {
+        translate: calc(var(--zr-startup-dx) * (1 - var(${PROGRESS}))) calc(var(--zr-startup-dy) * (1 - var(${PROGRESS}))) !important;
+      }
+      ${base}[data-zr-startup-clip] {
+        clip-path: inset(-8px ${edge} -8px ${edge} round 8px) !important;
+      }
     `;
-    root.append(style);root.setAttribute(PHASE,"waiting");cover=veil("zr-startup-cover");hold();
+    try{
+      sheetURI=Services.io.newURI("data:text/css;charset=utf-8,"+encodeURIComponent(cssText));
+      window.windowUtils.loadSheet(sheetURI,window.windowUtils.USER_SHEET);
+    }catch{
+      sheetURI=null;style=html("style");style.textContent=cssText;root.append(style);
+    }
+    root.setAttribute(PHASE,"waiting");cover=veil("zr-startup-cover");hold();
     timer=window.setTimeout(finish,2400);
     if(window.gBrowserInit?.delayedStartupFinished)onNativeReady();
     else{nativeObserver=subject=>{if(subject!==window)return;Services.obs.removeObserver(nativeObserver,"browser-delayed-startup-finished");nativeObserver=null;onNativeReady();};
