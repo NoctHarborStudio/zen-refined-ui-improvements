@@ -248,7 +248,7 @@ function install() {
   const contentOriginals=new WeakMap();
   function numeric(v,fallback=0){const n=parseFloat(v);return Number.isFinite(n)?n:fallback;}
   function measureLabel(ch,st,g,node){
-    const label=ch.getAttribute("value")??ch.textContent?.trim()??"";
+    const label=ch.getAttribute("value")||ch.textContent?.trim()||"";
     const title=label||node.getAttribute("label")||"";
     if(!title||!textContext)return null;
     try{
@@ -256,7 +256,7 @@ function install() {
       if("letterSpacing" in textContext)textContext.letterSpacing=st.letterSpacing==="normal"?"0px":st.letterSpacing;
       const textWidth=textContext.measureText(title).width;
       const extras=g.paddingLeft+g.paddingRight+numeric(st.borderLeftWidth)+numeric(st.borderRightWidth);
-      return {textWidth,extras,complete:textWidth+extras<=g.width+2};
+      return {textWidth,extras,complete:textWidth+extras<=g.width+2,rtl:st.direction==="rtl"};
     }catch{return null;}
   }
   function readContent(node,r){
@@ -296,8 +296,10 @@ function install() {
       if(g.labelMetrics?.complete){
         const needed=(g.labelMetrics.textWidth+g.labelMetrics.extras)*k+3/pixelRatio();
         const right=r.width*(1+card.sx)/2-(r.borderX||0);
-        const room=Math.max(out.width,right-out.left);
-        out.width=Math.min(room,Math.max(out.width,Math.ceil(needed*pixelRatio())/pixelRatio()));
+        const left=r.width*(1-card.sx)/2-(r.borderX||0);
+        const extra=Math.max(0,Math.ceil(needed*pixelRatio())/pixelRatio()-out.width);
+        if(g.labelMetrics.rtl){const add=Math.min(extra,Math.max(0,out.left-left));out.left-=add;out.width+=add;}
+        else out.width+=Math.min(extra,Math.max(0,right-out.left-out.width));
       }
     }
     if(g.lineHeight!==undefined)out.lineHeight=g.lineHeight*k;

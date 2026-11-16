@@ -81,19 +81,23 @@
   min-height: 0 !important;
   max-width: none !important;
   max-height: none !important;
+  min-inline-size: 0 !important;
+  min-block-size: 0 !important;
+  max-inline-size: none !important;
+  max-block-size: none !important;
   right: auto !important;
   bottom: auto !important;
-  left: var(--zr-bm-content-left);
-  top: var(--zr-bm-content-top);
-  width: var(--zr-bm-content-width);
-  height: var(--zr-bm-content-height);
-  padding-top: var(--zr-bm-content-padding-top);
-  padding-right: var(--zr-bm-content-padding-right);
-  padding-bottom: var(--zr-bm-content-padding-bottom);
-  padding-left: var(--zr-bm-content-padding-left);
+  left: var(--zr-bm-content-left) !important;
+  top: var(--zr-bm-content-top) !important;
+  width: var(--zr-bm-content-width) !important;
+  height: var(--zr-bm-content-height) !important;
+  padding-top: var(--zr-bm-content-padding-top) !important;
+  padding-right: var(--zr-bm-content-padding-right) !important;
+  padding-bottom: var(--zr-bm-content-padding-bottom) !important;
+  padding-left: var(--zr-bm-content-padding-left) !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-content-lock] > .toolbarbutton-text[data-zr-bm-content] {
-  font-size: var(--zr-bm-content-font-size);
+  font-size: var(--zr-bm-content-font-size) !important;
 }
 #PersonalToolbar[data-zr-magnetic-enabled] #PlacesToolbarItems > [data-zr-bm-card]::before {
   content: "";
