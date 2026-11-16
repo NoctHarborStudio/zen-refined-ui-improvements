@@ -5,7 +5,7 @@
 - Zen Refined owns Downloads state, native dock icon, transient detail card and one-shot flight. OnePlane may supply a connected chrome host via `window.__zenRefinedDownloadIndicator.setHost(element)`, release with `setHost(null)`, or expose `#oneplane-download-indicator-slot` and dispatch `OnePlane:DownloadHostChanged`. Same node, no duplicate data subscription. `getSnapshot()` exposes aggregate state only, not names/paths.
 - Native Zen: find the actual sidebar group containing the menu or Library (top/bottom/foot buttons), insert before the group, outside CustomizableUI's widget list. Follow sidebar side preference. When sidebar is hidden, use a small fixed edge fallback during a transfer, flight or open card. OnePlane's left fallback remains until its own dock exists. No changes to native controls.
 - Card is a root-level overlay, anchored inward from icon with 14px separation and viewport clamping. Colors inherit toolbar/arrowpanel theme tokens. Icon persists in native dock even when idle; speed is shown during transfer, and last result remains available in the native dock. Click icon to toggle card, click card to open native Library or Downloads.
-- Flight: one bounded 620ms WAAPI animation using sampled click and icon coordinates; no per-frame JavaScript, no flight for restored history or unfocused windows. Reduced motion skips flight. Card retracts after 3000ms; transfer updates never restart timer.
+- Flight: one bounded 620ms WAAPI animation (760ms fail-safe) using sampled click and icon coordinates; no per-frame JavaScript, no flight for restored history or unfocused windows. Reduced motion skips flight. Card retracts after 3000ms; transfer updates never restart timer.
 
 ## Data and render pipeline
 

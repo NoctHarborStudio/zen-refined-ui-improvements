@@ -14,7 +14,7 @@
   window[KEY]?.dispose?.();
   let dead=false,epoch=0,view=null,list=null,node=null,fill=null,speed=null,icon=null,host=null;
   let card=null,cardFill=null,cardName=null,cardSpeed=null,cardStatus=null,cardBytes=null,cardIcon=null,flight=null,flightAnimation=null;
-  let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,latest=null;
+  let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,flightTimer=0,latest=null;
   let updateTimer=0,hideTimer=0,readyObserver=null,layoutObserver=null,initialized=false,hydrating=false;
   let lastRender=0,snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"}),batch=new Map(),fresh=new WeakSet();
   const number=x=>Number.isFinite(x)?Math.max(0,x):0;
@@ -153,8 +153,10 @@
     layoutObserver=new MutationObserver(records=>{
       if(records.some(r=>{
         if(r.target===node||r.target===card||node.contains(r.target)||card.contains(r.target))return false;
-        if(r.type==="attributes")return true;
-        return [...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&n!==node&&n!==card&&!n.classList?.contains("zr-download-flight"));
+        const selector="#navigator-toolbox,#zen-sidebar-top-buttons,#zen-sidebar-bottom-buttons,#zen-sidebar-foot-buttons,#PanelUI-button,#PanelUI-menu-button,#zen-library-button,#downloads-button,#oneplane-download-indicator-slot";
+        const relevant=n=>n?.nodeType===1&&(n.matches?.(selector)||n.querySelector?.(selector));
+        if(r.type==="attributes")return r.target===root||r.target===observedSidebar||r.target===anchor||r.target.matches?.(selector);
+        return [...r.addedNodes,...r.removedNodes].some(n=>n!==node&&n!==card&&relevant(n));
       }))scheduleMount();
     });
     layoutObserver.observe(root,{attributes:true,attributeFilter:["oneplane-active","customizing","zen-compact-mode","zen-sidebar-expanded","zen-has-hover","hidden","collapsed"],childList:true});
@@ -183,6 +185,7 @@
   }
   function cancelFlight(){
     ++flightToken;
+    if(flightTimer)window.clearTimeout(flightTimer);flightTimer=0;
     if(flightAnimation)try{flightAnimation.cancel();}catch{}
     flightAnimation=null;flight?.remove();flight=null;updateLive();
   }
@@ -214,7 +217,9 @@
         {transform:"translate(calc(-50% + "+dx+"px),calc(-50% + "+dy+"px)) scale(.4)",opacity:.12,offset:1}
       ];
       flightAnimation=flight.animate(frames,{duration:620,easing:"cubic-bezier(.32,.04,.25,1)",fill:"forwards"});
-      flightAnimation.finished.then(()=>{if(dead||token!==flightToken)return;cancelFlight();openCard();},()=>{});
+      const land=()=>{if(dead||token!==flightToken)return;cancelFlight();openCard();};
+      flightTimer=window.setTimeout(land,760);
+      flightAnimation.finished.then(land,land);
     }catch{cancelFlight();openCard();}
   }
   function paint(){
