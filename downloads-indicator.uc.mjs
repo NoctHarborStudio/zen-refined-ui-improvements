@@ -59,9 +59,18 @@
     // not inherit these local values. Copy the resolved theme tokens.
     const source=observedSidebar||get("navigator-toolbox")||root;
     const st=window.getComputedStyle(source);
+    const surface=source.querySelector?.(".zen-toolbar-background");
+    const native=surface?window.getComputedStyle(surface):null;
+    const token=st.getPropertyValue("--zen-compact-mode-toolbar-background").trim();
+    // Use the real rendered sidebar's paint if available, including a
+    // workspace gradient. A transparent background must not obscure text.
+    const color=native?.backgroundColor;
+    const image=native?.backgroundImage;
+    const solid=color&&color!=="transparent"&&!/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color);
+    const paint=image&&image!=="none"?image+(solid?" "+color:""):solid?color:token;
     for(const n of targets){if(!n)continue;
       for(const [key,native] of [["--zr-native-surface","--zen-compact-mode-toolbar-background"],["--zr-native-outline","--zen-compact-mode-toolbar-outline-color"],["--zr-native-row","--zen-toolbar-element-bg"]]){
-        const value=st.getPropertyValue(native).trim();
+        const value=key==="--zr-native-surface"?paint:st.getPropertyValue(native).trim();
         if(value)n.style.setProperty(key,value);else n.style.removeProperty(key);
       }
       if(st.color)n.style.setProperty("--zr-native-fg",st.color);
@@ -402,7 +411,11 @@
       if(!row){row=makeRow(d);rows.set(d,row);}
       const text=v.active?sizeText(v.bytes)+(v.known?" / "+sizeText(v.total):"")+" · "+speedText(v.speed):
         v.success?"Complete · "+sizeText(v.total||v.bytes):v.failed?"Failed":"Stopped";
-      if(row.name.textContent!==v.name){row.name.textContent=v.name;row.name.setAttribute("title",v.name);}
+      if(row.name.textContent!==v.name)row.name.textContent=v.name;
+      if(row.tooltipTime!==v.time||row.tooltipName!==v.name){
+        row.tooltipTime=v.time;row.tooltipName=v.name;
+        row.name.setAttribute("title",v.name+(v.time?" — "+new Date(v.time).toLocaleString():""));
+      }
       if(row.meta.textContent!==text)row.meta.textContent=text;
       row.el.setAttribute("data-state",v.active?"active":v.success?"complete":v.failed?"failed":"stopped");
       row.el.toggleAttribute("data-indeterminate",v.active&&!v.known);
