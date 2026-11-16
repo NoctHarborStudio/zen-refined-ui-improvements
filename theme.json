@@ -4,7 +4,7 @@
   "description": "Zen Browser enhancements: Magnetic Bookmarks, Downloads Dock, Page Progress, Smart Search (recent tabs), Center Assembly & Disassembly. Standalone or with OnePlane.",
   "homepage": "https://github.com/NoctHarborStudio/zen-refined-ui-improvements/tree/preview",
   "author": "NoctHarborStudio",
-  "version": "0.6.0-preview.20",
+  "version": "0.6.0-preview.21",
   "style": {
     "chrome": "chrome.css"
   },
@@ -18,7 +18,7 @@
     "productivity"
   ],
   "createdAt": "2026-11-15",
-  "updatedAt": "2026-11-16T18:05:00.000Z",
+  "updatedAt": "2026-11-16T18:18:05.000Z",
   "fork": [
     "zen"
   ],

@@ -1,6 +1,6 @@
 # Zen Refined roadmap
 
-Baseline: `0.6.0-preview.20`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
+Baseline: `0.6.0-preview.21`. Zen Refined owns general browser UI improvements. OnePlane owns horizontal tabs and is an optional integration, not a required dependency.
 
 ## Implemented / accepted
 
@@ -97,3 +97,7 @@ User confirms OnePlane preview.29 workspace projection and search now work, but 
 ## Smart Search preview.20 — approved grouped grid implemented
 
 User approved up to six recent tabs and six recommended results, each 2 columns × 3 rows. Native rows stay in DOM order; headings are visual only, timing on the left, current tab included. Narrow panels use one column. Scoped query budget, immediate activation tracking and a bounded first-open recovery are implemented. The exact startup failure and actual rendering/selection still require Zen testing. OnePlane consumes the same shared native layout; its further visual polish remains queued.
+
+## Smart Search preview.21 — chronological columns
+
+User confirms preview.20 works; recommended entries were below the native 244px scroll cap. Implement column-major 6+6 ordering, sequential dot rails and stable separators, centered time, viewport-bounded expanded result height with no visible scrollbar, and scoped native Tab cycling. Verify standalone/OnePlane, short windows, actual geometry, keyboard navigation and reduced motion.

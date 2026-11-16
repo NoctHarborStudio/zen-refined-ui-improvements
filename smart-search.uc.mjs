@@ -105,11 +105,15 @@
     return Math.min(6,entries.filter(e=>Number.isFinite(e.last)&&e.last>0).length)+6;
   }
   function groupPlan(rows){
+    const classify=r=>r?.providerName===NAME||r?.payload?.dynamicType===TYPE?"recent":"recommended";
+    const recentCount=rows.filter(r=>classify(r)==="recent").length;
     const counts={recent:0,recommended:0};
     return rows.map(r=>{
-      const group=r?.providerName===NAME||r?.payload?.dynamicType===TYPE?"recent":"recommended";
-      const index=counts[group]++;
-      return {group,index,first:index===0,top:index<2};
+      const group=classify(r),index=counts[group]++;
+      const column=Math.floor(index/3)+1,local=index%3;
+      const row=(group==="recent"?0:Math.min(3,recentCount))+local+1;
+      const railLength=group==="recent"&&local===0?Math.min(3,recentCount-index):0;
+      return {group,index,first:index===0,top:local===0,column,row,railLength};
     });
   }
   function remember(state,entry){
@@ -218,14 +222,15 @@
   }
   let manager=null,registry=null,disposed=false,observer=null,joined=false,listener=null,child=null,parent=null,windowId=null;
   let bar=null,tabContainer=null,originalQuery=null,wrappedQuery=null,layoutRows=null,resizeObserver=null,openObserver=null,readyObserver=null,prefObserver=null,refreshTimer=0,inFlight=false,initialRecovered=false,ready=false,activeContext=null,windowState=null;
-  const diagnostic={version:4,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
+  const diagnostic={version:5,stage:"waiting",queries:0,eligible:false,empty:false,hasTabSource:false,candidates:0,emitted:0,error:null};
   const status=()=>({...diagnostic,registered:!!joined&&manager?.getProvider?.(NAME)===registry?.provider});
   window[STATUS]=status;
-  const ROW_ATTRS=["data-zr-group","data-zr-first","data-zr-top"];
+  const ROW_ATTRS=["data-zr-group","data-zr-first","data-zr-top","data-zr-cell","data-zr-rail","data-zr-column"];
   function clearLayout(){
     if(!layoutRows)return;
     layoutRows.removeAttribute("data-zr-smart-grid");
     layoutRows.removeAttribute("data-zr-narrow");
+    layoutRows.removeAttribute("data-zr-timeline");
     for(const row of layoutRows.children)for(const a of ROW_ATTRS)row.removeAttribute(a);
   }
   function layout(context){
@@ -242,14 +247,20 @@
     const plan=groupPlan(visible.map(r=>r.result));
     let nativeSeen=false;
     for(const p of plan){if(p.group==="recommended")nativeSeen=true;else if(nativeSeen){clearLayout();return;}}
-    clearLayout();
+    // Keep existing attributes intact on repeated notifications so the rail
+    // animation is not restarted during the same open search.
+    for(const row of rows.children)if(!visible.includes(row))for(const a of ROW_ATTRS)row.removeAttribute(a);
     visible.forEach((row,i)=>{
       const p=plan[i];row.setAttribute("data-zr-group",p.group);
       row.toggleAttribute("data-zr-top",p.top);
-      if(p.first)row.setAttribute("data-zr-first",p.group==="recent"?"Recent tabs":"Recommended");
+      row.setAttribute("data-zr-cell",p.row+"-"+p.column);
+      row.setAttribute("data-zr-column",String(p.column));
+      if(p.railLength)row.setAttribute("data-zr-rail",String(p.railLength));else row.removeAttribute("data-zr-rail");
+      if(p.first)row.setAttribute("data-zr-first",p.group==="recent"?"Recent tabs":"Recommended");else row.removeAttribute("data-zr-first");
     });
     rows.toggleAttribute("data-zr-narrow",rows.clientWidth<530);
     rows.setAttribute("data-zr-smart-grid","true");
+    if(!rows.hasAttribute("data-zr-timeline"))rows.setAttribute("data-zr-timeline","true");
   }
   function eligibleInput(){
     return !!bar?.focused&&!bar.searchMode&&!bar._suppressStartQuery&&
@@ -279,6 +290,26 @@
     if(bar?.view?.isOpen&&!bar.view.selectedElement)scheduleRefresh(false);
   }
   function onFocus(){scheduleRefresh(true);}
+  function nextRow(index,count,reverse){
+    if(count<1)return -1;
+    if(index<0)return reverse?count-1:0;
+    return (index+(reverse?-1:1)+count)%count;
+  }
+  function onGridTab(e){
+    if(e.key!=="Tab"||e.ctrlKey||e.altKey||e.metaKey||e.defaultPrevented||e.isComposing||
+       !bar?.focused||!bar.view?.isOpen||!layoutRows?.hasAttribute("data-zr-smart-grid")||
+       !activeContext||activeContext.searchString!==""||!prefs.getBoolPref(PREF,true)||
+       !(e.target===bar.inputField||bar.contains?.(e.target)))return;
+    const view=bar.view,n=view.visibleRowCount;
+    if(!Number.isInteger(n)||n<1)return;
+    try{
+      const next=nextRow(view.selectedRowIndex,n,e.shiftKey);
+      // Select the native row, not its secondary action or search-mode button.
+      // Leave Enter, Escape, Ctrl+Tab and ordinary typed queries untouched.
+      view.selectedRowIndex=next;
+      e.preventDefault();e.stopImmediatePropagation();
+    }catch(e){console.warn("[Zen Refined] Smart Search Tab:",e);}
+  }
   function onEscape(e){if(e.key==="Escape"){cancelRefresh();initialRecovered=true;}}
   function onReady(){
     ready=true;onActivation();scheduleRefresh(true);
@@ -358,6 +389,7 @@
       tabContainer?.addEventListener?.("TabSelect",onActivation);
       bar?.addEventListener?.("focusin",onFocus);
       bar?.addEventListener?.("keydown",onEscape,true);
+      window.addEventListener("keydown",onGridTab,true);
       if(window.MutationObserver&&bar?.nodeType){
         openObserver=new window.MutationObserver(()=>{
           if(!bar.view?.isOpen)clearLayout();
@@ -372,7 +404,7 @@
         readyObserver=subject=>{if(subject!==window)return;Services.obs.removeObserver(readyObserver,"browser-delayed-startup-finished");readyObserver=null;onReady();};
         Services.obs.addObserver(readyObserver,"browser-delayed-startup-finished");
       }else onReady();
-      console.info("[Zen Refined] Smart Search provider ready (preview.20, manager="+(direct===manager?"address-bar":"singleton")+")");
+      console.info("[Zen Refined] Smart Search provider ready (preview.21, manager="+(direct===manager?"address-bar":"singleton")+")");
     }catch(e){diagnostic.stage="error";diagnostic.error=String(e);console.warn("[Zen Refined] Smart Search unavailable:",e);}
   }
   function dispose(){
@@ -385,6 +417,7 @@
     tabContainer?.removeEventListener?.("TabSelect",onActivation);
     bar?.removeEventListener?.("focusin",onFocus);
     bar?.removeEventListener?.("keydown",onEscape,true);
+    window.removeEventListener("keydown",onGridTab,true);
     if(child&&wrappedQuery&&child.startQuery===wrappedQuery)child.startQuery=originalQuery;
     try{bar?.view?.clearTopSitesCache?.();}catch{}
     try{if(listener)child?.removeListener?.(listener);}catch{}

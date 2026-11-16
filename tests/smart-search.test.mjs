@@ -121,7 +121,7 @@ test("6+6 budget and group starts preserve original row order",()=>{
  assert.equal(api.resultBudget(e.slice(0,3)),9);
  assert.equal(api.selectRecent(e,12,6).length,6);
  const recent={payload:{dynamicType:"zr-recent-tab"}},native={providerName:"native"};
- assert.deepEqual(api.groupPlan([recent,recent,recent,native,native]).map(x=>[x.group,x.first,x.top]),[["recent",true,true],["recent",false,true],["recent",false,false],["recommended",true,true],["recommended",false,true]]);
+ assert.deepEqual(api.groupPlan([recent,recent,recent,native,native]).map(x=>[x.group,x.first,x.top]),[["recent",true,true],["recent",false,false],["recent",false,false],["recommended",true,true],["recommended",false,false]]);
  assert.equal(api.zeroPrefix({searchString:"",sapName:"urlbar"},true,true),true);
  assert.equal(api.zeroPrefix({searchString:"typed",sapName:"urlbar"},true,true),false);
  assert.equal(api.zeroPrefix({searchString:"",isPrivate:true},true,true),false);
@@ -162,4 +162,21 @@ test("actual lifecycle raises only zero-prefix budget, groups native rows and pe
  assert.equal(rows.hasAttribute("data-zr-smart-grid"),false);
  w.__zenRefinedSmartSearch();assert.equal(child.startQuery,original);assert.equal(timers.size,0);
  assert.equal(listener,null);
+});
+
+test("column-major geometry keeps chronological DOM order and separate groups",()=>{
+ const r={payload:{dynamicType:"zr-recent-tab"}},n={providerName:"native"};
+ const p=api.groupPlan([...Array(6).fill(r),...Array(6).fill(n)]);
+ assert.deepEqual(p.map(x=>[x.row,x.column]),[[1,1],[2,1],[3,1],[1,2],[2,2],[3,2],[4,1],[5,1],[6,1],[4,2],[5,2],[6,2]]);
+ assert.deepEqual(p.map(x=>x.railLength),[3,0,0,3,0,0,0,0,0,0,0,0]);
+ const q=api.groupPlan([r,r,n,n,n,n]);
+ assert.deepEqual(q.map(x=>[x.row,x.column]),[[1,1],[2,1],[3,1],[4,1],[5,1],[3,2]]);
+ assert.equal(q[0].railLength,2);
+});
+test("native grid Tab wraps rows in chronological order",()=>{
+ const i=source.indexOf("function nextRow("),j=source.indexOf("function onGridTab(",i);
+ const next=new Function(source.slice(i,j)+"return nextRow;")();
+ assert.equal(next(-1,12,false),0);assert.equal(next(2,12,false),3);
+ assert.equal(next(11,12,false),0);assert.equal(next(0,12,true),11);
+ assert.equal(next(-1,12,true),11);assert.equal(next(-1,0,false),-1);
 });

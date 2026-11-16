@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0-preview.21
+
+- Smart Search fills columns top-to-bottom (1–3 left, 4–6 right), for both groups. Keep native DOM/selection order. Add subtle sequential timeline dots, stable column and section dividers, vertically centered timestamps and reduced-motion support.
+- Override Zen's 244px result-height cap only for the active grid, bounded by viewport height with hidden scrollbar and scroll fallback in short windows. Native Tab and Shift+Tab cycle rows instead of opening search actions; ordinary typed search and Ctrl+Tab remain unchanged.
+
 ## 0.6.0-preview.20
 
 - Implement the approved grouped Smart Search 2×3 + 2×3 layout using native selectable rows, with left-side activity timestamps and current-tab inclusion. Narrow panels fall back to one column. Preserve typed search and native recommendations; no global result-limit preference change.

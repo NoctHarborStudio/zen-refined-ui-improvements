@@ -25,3 +25,7 @@ Automatic Browser Console messages identify the provider manager, native query s
 ## Preview.20
 
 The approved 6+6 grid replaces the initial four-item limit. Only the eligible zero-prefix context budget changes, no global preferences. Native rows retain their order, click and Enter handling; CSS adds two columns and visual group labels with single-column fallback below 530px. Current tab is included, native lastSeenActive and per-window weak activation timestamps are used, and time is computed on query. Startup recovery is bounded and gated on a focused eligible input, not forced opening. Runtime visual/keyboard validation remains pending.
+
+## Preview.21
+
+Explicit grid coordinates preserve native DOM order and fill the left column before the right. Each group starts on a fresh grid row. The recent rail is a noninteractive CSS pseudo-element with sequential dot motion; reduced motion bypasses it. The Zen results max-height token defaults to 244px, overridden only on the grid, with a viewport limit and hidden scrollbar fallback. Tab/Shift+Tab use the native selectedRowIndex setter within the focused eligible grid, never a secondary action. No global keyboard preference changes.
