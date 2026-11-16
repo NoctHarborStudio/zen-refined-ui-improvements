@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0-preview.11
+
+- Republish preview.10 with a newer full UTC timestamp for Sine update detection. No runtime changes.
+
 ## 0.6.0-preview.10
 
 - Implement the approved cubic fluid-wave contour: a connected narrow stream extends from the sidebar, then fills the panel diagonally; closing reverses the same frames, mirrored for the other side.
