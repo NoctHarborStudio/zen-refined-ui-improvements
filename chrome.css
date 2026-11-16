@@ -200,7 +200,11 @@
 #zr-download-indicator .zr-download-speed { font-size:9px;white-space:nowrap;opacity:.88;max-width:100%;overflow:hidden;text-overflow:ellipsis; }
 #zr-download-indicator .zr-download-speed:empty { display:none; }
 #zr-download-indicator .zr-download-track { width:34px; }
-#zr-download-indicator[data-state="idle"] .zr-download-track { display:none; }
+#zr-download-indicator:not([data-transferring]) .zr-download-track { display:none !important; }
+#zr-download-card[data-state="idle"] .zr-download-track { display:none !important; }
+/* Hide the redundant footer entry only while native dock is installed.
+ * Do not disable Library or change CustomizableUI/prefs. */
+:root[data-zr-downloads-native]:not([customizing]) :is(#zen-sidebar-foot-buttons,#zen-sidebar-bottom-buttons) #zen-library-button { display:none !important; }
 #zr-download-indicator[data-fallback] {
   position:fixed !important;
   inset:70px 18px auto auto !important;
@@ -256,7 +260,7 @@
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v12m-5-5 5 5 5-5M5 16v4h14v-4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;
 }
 #zr-download-card .zr-download-icon { width:22px;height:22px;flex-basis:22px; }
-:is(#zr-download-indicator,#zr-download-card)[data-state="complete"] .zr-download-icon {
+#zr-download-card[data-state="complete"] .zr-download-icon {
   mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5 12 5 5L20 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 .zr-download-flight { position:fixed !important;z-index:2147483001 !important;display:grid;place-items:center;width:33px;height:33px;border-radius:9px;background:var(--zr-download-surface);border:1px solid color-mix(in srgb,currentColor 12%,transparent);box-shadow:0 4px 12px #0003;pointer-events:none !important; }

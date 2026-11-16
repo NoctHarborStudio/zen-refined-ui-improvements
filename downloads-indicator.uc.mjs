@@ -16,6 +16,7 @@
   let card=null,cardFill=null,cardName=null,cardSpeed=null,cardStatus=null,cardBytes=null,cardIcon=null,flight=null,flightAnimation=null;
   let layoutFrame=0,resizeObserver=null,observedSidebar=null,anchor=null,lastClick=null,cardOpen=false,flightToken=0,flightTimer=0,latest=null;
   let updateTimer=0,hideTimer=0,readyObserver=null,layoutObserver=null,initialized=false,hydrating=false;
+  let lastDockRect=null;
   let lastRender=0,snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"}),batch=new Map(),fresh=new WeakSet();
   const number=x=>Number.isFinite(x)?Math.max(0,x):0;
   const current=()=>window.performance.now();
@@ -69,19 +70,41 @@
   function nativeAnchor(){
     const toolbox=get("navigator-toolbox");
     if(!toolbox)return null;
-    const menu=get("PanelUI-button")||get("PanelUI-menu-button");
-    const library=get("zen-library-button")||get("downloads-button");
-    // Prefer the actual native group containing the menu/Library, not a
-    // fixed top/bottom coordinate. Never insert into CustomizableUI's
-    // widget list itself (it owns that list).
-    const groups=["zen-sidebar-top-buttons","zen-sidebar-bottom-buttons","zen-sidebar-foot-buttons"].map(get).filter(n=>n&&toolbox.contains(n));
-    return groups.find(n=>menu&&n.contains(menu))||groups.find(n=>library&&n.contains(library))||
-      groups.find(n=>n.id==="zen-sidebar-top-buttons")||groups[0]||null;
+    // Never prefer Library or the menu in the footer: this control belongs
+    // to the top of the native sidebar. Structural placement must not
+    // depend on visibility (Compact Mode moves the entire sidebar).
+    const top=get("zen-sidebar-top-buttons");
+    const tabs=get("tabbrowser-tabs"),wrapper=get("zen-tabs-wrapper");
+    for(const n of [top,tabs,wrapper]){
+      if(n?.parentElement&&toolbox.contains(n)&&!n.closest?.("#zen-sidebar-foot-buttons,#zen-sidebar-bottom-buttons"))return {parent:n.parentElement,before:n};
+    }
+    // A different native layout still gets a top-of-toolbox slot.
+    return {parent:toolbox,before:toolbox.firstElementChild};
   }
-  function side(){return onePlane()?"left":prefs.getBoolPref(SIDE,false)?"right":"left";}
+  function side(){
+    if(onePlane())return "left";
+    // Zen exposes the actual resolved side as a root attribute, while
+    // the preference is a fallback during initialization.
+    const value=root.getAttribute("zen-right-side");
+    return value==="true"?"right":value==="false"?"left":prefs.getBoolPref(SIDE,false)?"right":"left";
+  }
+  function dockRect(){
+    const right=side()==="right";
+    if(node&&visible(node)&&(!observedSidebar||!node.hasAttribute("data-zr-native")||visible(observedSidebar))){
+      const r=node.getBoundingClientRect(),i=icon.getBoundingClientRect();
+      // Only cache an on-screen native dock, never a translated hidden
+      // sidebar. A partially visible edge is not a reliable anchor.
+      if(r.left>=0&&r.right<=window.innerWidth&&r.top>=0&&r.bottom<=window.innerHeight&&i.width>0){
+        lastDockRect={left:r.left,right:r.right,top:r.top,height:r.height,x:i.left+i.width/2,y:i.top+i.height/2,side:side()};
+      }
+    }
+    if(lastDockRect?.side===side())return lastDockRect;
+    const width=58,top=70,left=right?window.innerWidth-width-18:18;
+    return {left,right:left+width,top,height:33,x:left+width/2,y:top+16.5,side:side()};
+  }
   function positionCard(){
     if(!card||!node||!cardOpen)return;
-    const r=node.getBoundingClientRect(),right=node.getAttribute("data-side")==="right";
+    const r=dockRect(),right=r.side==="right";
     const w=Math.min(264,Math.max(140,window.innerWidth-28)),h=card.offsetHeight||82,gap=14;
     let x=right?r.left-w-gap:r.right+gap;
     x=Math.max(14,Math.min(window.innerWidth-w-14,x));
@@ -93,25 +116,34 @@
   function mount(){
     if(!node||dead)return;
     const one=onePlane(),slot=one&&(host?.isConnected?host:get("oneplane-download-indicator-slot"));
-    const group=!one?nativeAnchor():null;
+    const placement=!one?nativeAnchor():null;
     const toolbox=get("navigator-toolbox");
-    const native=group&&group.parentElement&&visible(group)&&visible(toolbox);
-    const parent=slot|| (native?group.parentElement:root);
-    anchor=native?group:null;
-    const changed=node.parentElement!==parent||(native&&node.nextElementSibling!==group);
+    const native=!!placement;
+    const parent=slot||placement?.parent||root;
+    const before=placement?.before;
+    anchor=before||null;
+    const changed=node.parentElement!==parent||(native&&before&&node.nextElementSibling!==before);
     const oldSide=node.getAttribute("data-side");
-    if(changed){if(native)parent.insertBefore(node,group);else parent.append(node);}
+    if(changed){
+      if(native&&before&&before!==node)parent.insertBefore(node,before);
+      else if(native&&!before)parent.append(node);
+      else parent.append(node);
+    }
     node.toggleAttribute("data-zr-hosted",!!slot);
-    node.toggleAttribute("data-zr-native",!!native);
+    node.toggleAttribute("data-zr-native",native);
     node.toggleAttribute("data-zr-oneplane",!!one&&!slot);
     node.setAttribute("data-side",side());
-    // Native sidebar can be auto-hidden. The root fallback stays visible
-    // during a transfer or notification; no phantom idle overlay.
+    // Only OnePlane without a host (or an unsupported missing toolbox)
+    // uses the floating fallback. A hidden native sidebar never reparents.
     node.toggleAttribute("data-fallback",!slot&&!native);
+    root.toggleAttribute("data-zr-downloads-native",native);
+    if(changed||(oldSide&&oldSide!==side()))lastDockRect=null;
     if(resizeObserver&&toolbox!==observedSidebar){
       resizeObserver.disconnect();observedSidebar=toolbox;if(toolbox)resizeObserver.observe(toolbox);
     }
-    if(cardOpen)positionCard();
+    // Cache the last visible location on structural/visibility changes.
+    dockRect();
+    if(cardOpen&&(changed||(oldSide&&oldSide!==side())||visible(node)))positionCard();
     if(flight&&(changed||(oldSide&&oldSide!==side()))){cancelFlight();openCard();}
   }
   function scheduleMount(){
@@ -135,13 +167,13 @@
   }
   function build(){
     node=make("button","zr-download-indicator");node.id="zr-download-indicator";node.type="button";
-    node.setAttribute("aria-label","Show download details");node.setAttribute("aria-expanded","false");
+    node.setAttribute("aria-label","Show download details");node.setAttribute("aria-expanded","false");node.setAttribute("data-state","idle");
     speed=make("span","zr-download-speed");
     icon=make("span","zr-download-icon");icon.setAttribute("aria-hidden","true");
     const [track,f]=makeTrack();fill=f;node.append(speed,icon,track);
     node.addEventListener("click",()=>{cancelFlight();if(cardOpen)closeCard();else openCard();});
     card=make("button","zr-download-card");card.id="zr-download-card";card.type="button";
-    card.setAttribute("aria-label","Open native downloads");card.setAttribute("aria-hidden","true");card.tabIndex=-1;
+    card.setAttribute("aria-label","Open native downloads");card.setAttribute("aria-hidden","true");card.setAttribute("data-state","idle");card.tabIndex=-1;
     const body=make("span","zr-download-body"),line=make("span","zr-download-line"),bottom=make("span","zr-download-line");
     cardName=make("span","zr-download-name");cardSpeed=make("span","zr-download-speed");cardStatus=make("span","zr-download-status");cardBytes=make("span","zr-download-bytes");
     line.append(cardName,cardSpeed);bottom.append(cardBytes,cardStatus);
@@ -153,13 +185,13 @@
     layoutObserver=new MutationObserver(records=>{
       if(records.some(r=>{
         if(r.target===node||r.target===card||node.contains(r.target)||card.contains(r.target))return false;
-        const selector="#navigator-toolbox,#zen-sidebar-top-buttons,#zen-sidebar-bottom-buttons,#zen-sidebar-foot-buttons,#PanelUI-button,#PanelUI-menu-button,#zen-library-button,#downloads-button,#oneplane-download-indicator-slot";
+        const selector="#navigator-toolbox,#zen-sidebar-top-buttons,#zen-tabs-wrapper,#tabbrowser-tabs,#oneplane-download-indicator-slot";
         const relevant=n=>n?.nodeType===1&&(n.matches?.(selector)||n.querySelector?.(selector));
         if(r.type==="attributes")return r.target===root||r.target===observedSidebar||r.target===anchor||r.target.matches?.(selector);
         return [...r.addedNodes,...r.removedNodes].some(n=>n!==node&&n!==card&&relevant(n));
       }))scheduleMount();
     });
-    layoutObserver.observe(root,{attributes:true,attributeFilter:["oneplane-active","customizing","zen-compact-mode","zen-sidebar-expanded","zen-has-hover","hidden","collapsed"],childList:true});
+    layoutObserver.observe(root,{attributes:true,attributeFilter:["oneplane-active","customizing","zen-right-side","zen-compact-mode","zen-sidebar-expanded","zen-has-hover","hidden","collapsed"],childList:true});
     const toolbox=get("navigator-toolbox");
     if(toolbox)layoutObserver.observe(toolbox,{subtree:true,childList:true,attributes:true,attributeFilter:["hidden","collapsed","zen-has-hover","zen-compact-mode-active","zen-sidebar-expanded"]});
     window.addEventListener("resize",scheduleMount);window.addEventListener("OnePlane:DownloadHostChanged",scheduleMount);
@@ -195,8 +227,8 @@
     const activeWindow=!document.hasFocus||document.hasFocus();
     if(!activeWindow)return;
     node.setAttribute("data-live","true");
-    if(reduced.matches||!visible(node)){openCard();return;}
-    const r=icon.getBoundingClientRect(),tx=r.left+r.width/2,ty=r.top+r.height/2;
+    if(reduced.matches){openCard();return;}
+    const r=dockRect(),tx=r.x,ty=r.y;
     const native=window.gZenUIManager?._lastClickPosition;
     const click=lastClick&&current()-lastClick.at<5000?lastClick:
       native&&Number.isFinite(native.clientX)&&Number.isFinite(native.clientY)?{x:native.clientX,y:native.clientY}:null;
@@ -228,6 +260,7 @@
     const details=(latest&&batch.get(latest))||[...batch.values()].find(x=>x.active)||[...batch.values()].at(-1);
     node.setAttribute("data-state",s.state);card.setAttribute("data-state",s.state);
     updateLive();
+    node.toggleAttribute("data-transferring",s.active>0);
     const unknown=s.state==="active"&&s.progress===null;
     node.toggleAttribute("data-indeterminate",unknown);card.toggleAttribute("data-indeterminate",unknown);
     for(const f of [fill,cardFill]){
@@ -284,7 +317,7 @@
     try{prefs.removeObserver(SIDE,scheduleMount);}catch{}
     node?.remove();card?.remove();node=fill=speed=icon=card=cardFill=cardName=cardSpeed=cardStatus=cardBytes=cardIcon=null;host=null;batch.clear();fresh=new WeakSet();latest=lastClick=null;
     snapshot=Object.freeze({active:0,progress:null,speed:0,state:"idle"});
-    root.removeAttribute(ACTIVE);
+    root.removeAttribute(ACTIVE);root.removeAttribute("data-zr-downloads-native");lastDockRect=null;
   }
   async function install(){
     if(dead||node||!enabled())return;
@@ -300,7 +333,7 @@
       // Hide only this window's confusing native flight. Do not write the
       // global zen.downloads.download-animation preference or patch Zen.
       root.setAttribute(ACTIVE,"true");
-      if(batch.size)schedule(true);
+      schedule(true);
     }catch(error){console.warn("[Zen Refined] Download indicator:",error);teardown();}
   }
   function sync(){if(!initialized||dead)return;if(enabled())void install();else teardown();}

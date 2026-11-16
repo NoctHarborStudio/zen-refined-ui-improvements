@@ -109,3 +109,9 @@ Known limitations of the untested preview: native overflow measurements can vary
 Test Refined only, OnePlane only, both installation/load orders, both disable orders and Sine hot reload. Confirm exactly one #zr-bookmark-indicator and one shared controller per window. Existing zen.refined.bookmarks settings persist. Verify no hover retarget while OnePlane address-wave attribute is present, native bookmark text and folder actions, reduced motion and cleanup. Registry lease logic tested with stubs; actual Zen runtime remains unverified.
 
 Run `node --test tests/shared-bookmarks.test.mjs` for the shared lease regression tests. When mixing a new shared build with a legacy build, update both; disabling the last shared copy after it replaced a legacy controller can require restarting the remaining legacy mod.
+
+## 0.6.0-preview.4 — native top placement and idle state
+
+- [ ] Native sidebar on either side: icon above top controls, not footer. Hide/show or scroll sidebar: same node/parent, no jump to top-edge fallback. Verify last visible notification anchor.
+- [ ] Fresh idle, completed, canceled: no dock speed/progress strip; normal download glyph. Empty card has no progress strip. Native footer Library is hidden only with active native dock, still available from details card; disable/customize restores it.
+- [ ] OnePlane fallback and host remain unchanged; page progress, startup and bookmarks unchanged.
