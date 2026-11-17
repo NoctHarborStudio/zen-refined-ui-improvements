@@ -1,5 +1,7 @@
 # Zen Refined — UI Improvements for Zen Browser
 
+> **LEGACY — no longer maintained.** Zen Refined has been merged into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs), which is now the only active project. This repository is retained for historical reference and source inspection. Do not install it alongside OnePlane or submit new feature work here. For contributors and coding agents: use the OnePlane repository for all new development, fixes, releases and documentation. Existing Zen Refined code may be consulted as historical reference only.
+
 A modular collection of visual and usability enhancements for [Zen Browser](https://zen-browser.app/). Built for native Zen, with optional integration into [OnePlane](https://github.com/NoctHarborStudio/zen-oneplane-horizontal-tabs).
 
 **Current development preview: `0.6.0-preview.25`** · Target: Zen 1.24.2b / Sine 2.3.3.
